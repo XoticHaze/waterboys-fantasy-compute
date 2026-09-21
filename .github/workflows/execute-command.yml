@@ -2,6 +2,10 @@ name: WaterBoys Execute Command R1
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'rendezvous/fire/waterboys-execute-command-r1'
 
 permissions:
   contents: read
