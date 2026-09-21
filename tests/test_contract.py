@@ -6,6 +6,7 @@ from pathlib import Path
 
 from waterboys_compute.command import execute_guarded
 from waterboys_compute.normalize import survival_node
+from waterboys_compute.value import build_value_engine, optimize
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +71,61 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(node["elimination_watch"]["gap_to_next_team"], 10.0)
         self.assertEqual(teams[0]["current_week_rank"], 1)
         self.assertEqual(teams[1]["current_week_projection_rank"], 1)
+
+    def test_value_engine_measures_marginal_lineup_gain(self):
+        roster_cfg = {
+            "slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "DST": 1, "K": 1}
+        }
+        def p(pid, name, pos, proj, status="ACTIVE"):
+            return {
+                "player_id": pid, "name": name, "position": pos,
+                "projected_avg_points": proj, "avg_points": proj,
+                "injury_status": status, "injured": False,
+            }
+
+        waterboys = {
+            "team_id": 18, "name": "WaterBoys",
+            "acquisition_budget_remaining": 1000,
+            "roster": [
+                p(1, "QB", "QB", 30), p(2, "RB1", "RB", 18),
+                p(3, "RB2", "RB", 13.5), p(4, "WR1", "WR", 25),
+                p(5, "WR2", "WR", 19), p(6, "WR3", "WR", 14.5),
+                p(7, "TE1", "TE", 15), p(8, "DST", "D/ST", 9),
+                p(9, "K", "K", 10), p(10, "QB2", "QB", 28),
+                p(11, "WR4", "WR", 7), p(12, "TE2", "TE", 5),
+                p(13, "DST2", "D/ST", 8), p(14, "DST3", "D/ST", 7.5),
+            ],
+        }
+        free_agents = [
+            p(100, "Cheap RB", "RB", 13.0),
+            p(101, "Cheap WR", "WR", 12.0),
+        ]
+        at_risk = {
+            "team_id": 3, "name": "At Risk", "roster_count": 14,
+            "roster": [p(200, "Elite RB", "RB", 31.0)],
+        }
+        teams = [waterboys, at_risk]
+        survival = {"elimination_watch": {"team_id": 3}}
+        settings = {"regular_season_count": 17}
+        league_cfg = {
+            "current_week": 2, "roster": roster_cfg,
+            "waivers": {"faab_start": 1000},
+        }
+
+        base = optimize(waterboys["roster"], roster_cfg)
+        self.assertAlmostEqual(base["projected_ppg"], 154.0)
+
+        engine = build_value_engine(
+            waterboys, teams, free_agents, survival, league_cfg, settings
+        )
+        elite = engine["elimination_watch_targets"][0]
+        self.assertAlmostEqual(elite["value"]["marginal_lineup_ppg"], 17.5)
+        self.assertAlmostEqual(elite["value"]["expected_added_points_remaining"], 262.5)
+        self.assertEqual(elite["value"]["best_free_replacement"], "Cheap RB")
+        self.assertTrue(elite["value"]["immediate_starter"])
+        self.assertGreaterEqual(elite["faab_reference"]["midpoint"], 300)
+        self.assertLessEqual(elite["faab_reference"]["midpoint"], 500)
+        self.assertTrue(elite["faab_reference"]["advisory_only"])
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
