@@ -81,12 +81,24 @@ def replacement(candidate: dict, free_agents: list[dict]) -> tuple[float, str | 
     )
 
 
-def suggest_drop(roster: list[dict], lineup_ids: set, roster_cfg: dict) -> dict | None:
+def suggest_drop(roster: list[dict], candidate: dict, lineup_ids: set, roster_cfg: dict) -> dict | None:
     counts = Counter(str(p.get("position") or "") for p in roster)
     starters = slot_counts(roster_cfg)
+    limits = (roster_cfg or {}).get("position_limits") or {}
+    candidate_pos = str(candidate.get("position") or "")
+    limit_key = "DST" if candidate_pos == "D/ST" else candidate_pos
+    hard_limit = limits.get(limit_key)
+    forced_position = (
+        candidate_pos
+        if isinstance(hard_limit, int) and counts.get(candidate_pos, 0) >= hard_limit
+        else None
+    )
+
     choices = []
     for player in roster:
         if player.get("player_id") in lineup_ids:
+            continue
+        if forced_position and str(player.get("position") or "") != forced_position:
             continue
         pos = str(player.get("position") or "")
         need = float(starters.get(pos, 0))
@@ -153,9 +165,21 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
             "best_free_replacement": replacement_name,
             "immediate_starter": candidate.get("player_id") in new["ids"],
         },
-        "suggested_drop": suggest_drop(roster, new["ids"], roster_cfg),
+        "suggested_drop": suggest_drop(roster, candidate, new["ids"], roster_cfg),
         "faab_reference": bid_range(candidate, source, risk, scarcity, budget),
     }
+    bid = result["faab_reference"]
+    if bid.get("applicable") and int(bid.get("midpoint") or 0) > 0:
+        midpoint = int(bid["midpoint"])
+        result["cost_efficiency"] = {
+            "risk_adjusted_ppg_per_100_faab_at_midpoint": round(risk * 100 / midpoint, 3),
+            "remaining_points_per_100_faab_at_midpoint": round(
+                result["value"]["expected_added_points_remaining"] * 100 / midpoint, 2
+            ),
+        }
+    else:
+        result["cost_efficiency"] = None
+    return result
 
 
 def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dict],
