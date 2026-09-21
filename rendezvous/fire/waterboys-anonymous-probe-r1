@@ -1,0 +1,6 @@
+{
+  "schema": "waterboys.fire.v1",
+  "action": "anonymous_espn_probe",
+  "league_id": 594260315,
+  "season": 2026
+}
