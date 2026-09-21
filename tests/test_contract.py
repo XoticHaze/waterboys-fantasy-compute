@@ -66,6 +66,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(node["eliminated_team_count"], 1)
         self.assertEqual(node["current_week_cutline_points"], 110.0)
         self.assertEqual(node["waterboys_margin_over_cutline"], 0.0)
+        self.assertEqual(node["elimination_watch"]["team_id"], 2)
+        self.assertEqual(node["elimination_watch"]["gap_to_next_team"], 10.0)
         self.assertEqual(teams[0]["current_week_rank"], 1)
         self.assertEqual(teams[1]["current_week_projection_rank"], 1)
 
