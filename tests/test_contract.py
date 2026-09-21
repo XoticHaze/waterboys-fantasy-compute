@@ -31,7 +31,9 @@ class ContractTests(unittest.TestCase):
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
         self.assertIn("espn-session-bootstrap.yml@refs/heads/main", worker)
         self.assertIn("url.pathname === '/v1/login-bootstrap'", worker)
+        self.assertIn("url.pathname === '/v1/login-otp'", worker)
         self.assertIn("requireWorkflow(identity, 'login')", worker)
+        self.assertIn("env.ESPN_OTP", worker)
 
         config = json.loads(
             (ROOT / "cloudflare/waterboys-broker/wrangler.jsonc").read_text(encoding="utf-8")
@@ -43,6 +45,10 @@ class ContractTests(unittest.TestCase):
         )
         self.assertIn("xvfb-run -a node scripts/espn_session_bootstrap.mjs", workflow)
         self.assertIn("WATERBOYS_ESPN_SESSION_PLAINTEXT_DESTROYED=1", workflow)
+        bootstrap = (ROOT / "scripts/espn_session_bootstrap.mjs").read_text(encoding="utf-8")
+        self.assertIn("WATERBOYS_ESPN_OTP_WAITING", bootstrap)
+        self.assertIn("WATERBOYS_ESPN_OTP_RECEIVED", bootstrap)
+        self.assertIn("WATERBOYS_ESPN_OTP_RESULT", bootstrap)
         self.assertNotIn("secrets.ESPN_USERNAME", workflow)
         self.assertNotIn("secrets.ESPN_PASSWORD", workflow)
         self.assertNotIn("secrets.ESPN_S2", workflow)

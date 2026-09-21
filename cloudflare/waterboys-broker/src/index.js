@@ -271,6 +271,15 @@ export default {
         });
       }
 
+      if (url.pathname === '/v1/login-otp') {
+        requireWorkflow(identity, 'login');
+        const otp = String(env.ESPN_OTP || '').trim();
+        if (!/^\d{6,8}$/.test(otp)) {
+          return json({ready: false});
+        }
+        return json({ready: true, otp});
+      }
+
       if (url.pathname === '/v1/runtime-config') {
         if (![WORKFLOWS.snapshot, WORKFLOWS.execute].includes(identity.workflow_ref)) {
           throw new Error('workflow_authority_rejected');

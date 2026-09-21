@@ -65,6 +65,38 @@ async function fetchLoginBootstrap() {
   return node;
 }
 
+async function fetchLoginOtp() {
+  const token = await githubOidcToken();
+  const response = await fetch(BROKER_URL + '/v1/login-otp', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-WaterBoys-Caller-Run-Id': String(process.env.GITHUB_RUN_ID || ''),
+    },
+    body: '{}',
+  });
+  if (!response.ok) throw new Error(`login_otp_broker_http_${response.status}`);
+  const node = await response.json();
+  const otp = String(node?.otp || '').trim();
+  return node?.ready === true && /^\d{6,8}$/.test(otp) ? otp : '';
+}
+
+async function waitForLoginOtp(page, timeoutMs) {
+  marker('WATERBOYS_ESPN_OTP_WAITING', '1');
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const otp = await fetchLoginOtp();
+    if (otp) {
+      marker('WATERBOYS_ESPN_OTP_RECEIVED', '1');
+      return otp;
+    }
+    await page.waitForTimeout(2000);
+  }
+  return '';
+}
+
 async function firstVisibleInput(page, selectors) {
   for (const frame of page.frames()) {
     for (const selector of selectors) {
@@ -106,6 +138,67 @@ async function maybeClick(page, regex) {
   if (!button) return false;
   await button.click();
   return true;
+}
+
+async function findOtpTarget(page) {
+  const selectors = [
+    'input[autocomplete="one-time-code"]',
+    'input[name*="otp" i]',
+    'input[id*="otp" i]',
+    'input[name*="code" i]',
+    'input[id*="code" i]',
+    'input[name*="passcode" i]',
+    'input[id*="passcode" i]',
+    'input[aria-label*="code" i]',
+    'input[placeholder*="code" i]',
+    'input[inputmode="numeric"]',
+  ];
+  const single = await firstVisibleInput(page, selectors);
+  if (single) return { kind: 'single', input: single };
+
+  for (const frame of page.frames()) {
+    const loc = frame.locator('input[maxlength="1"]');
+    try {
+      const count = await loc.count();
+      const visible = [];
+      for (let i = 0; i < count; i += 1) {
+        const item = loc.nth(i);
+        if (await item.isVisible({ timeout: 150 })) visible.push(item);
+      }
+      if (visible.length >= 6) return { kind: 'split', inputs: visible.slice(0, 8) };
+    } catch {}
+  }
+  return null;
+}
+
+async function waitForOtpTarget(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const target = await findOtpTarget(page);
+    if (target) return target;
+    await page.waitForTimeout(500);
+  }
+  return null;
+}
+
+async function fillOtpTarget(target, otp) {
+  if (target.kind === 'single') {
+    await target.input.fill(otp);
+    return;
+  }
+  for (let i = 0; i < target.inputs.length && i < otp.length; i += 1) {
+    await target.inputs[i].fill(otp[i]);
+  }
+}
+
+async function readSessionCookies(context) {
+  const cookies = await context.cookies();
+  const s2Cookie = cookies.find((cookie) => cookie.name.toLowerCase() === 'espn_s2');
+  const swidCookie = cookies.find((cookie) => cookie.name.toLowerCase() === 'swid');
+  return {
+    espnS2: String(s2Cookie?.value || ''),
+    swid: String(swidCookie?.value || ''),
+  };
 }
 
 async function bodyHasChallenge(page) {
@@ -212,25 +305,44 @@ try {
           await password.press('Enter');
         }
 
-        const deadline = Date.now() + 45000;
-        let espnS2 = '';
-        let swid = '';
-        while (Date.now() < deadline) {
-          const cookies = await context.cookies();
-          const s2Cookie = cookies.find((cookie) => cookie.name.toLowerCase() === 'espn_s2');
-          const swidCookie = cookies.find((cookie) => cookie.name.toLowerCase() === 'swid');
-          espnS2 = String(s2Cookie?.value || '');
-          swid = String(swidCookie?.value || '');
-          if (espnS2 && swid) break;
-          await page.waitForTimeout(1000);
+        let { espnS2, swid } = await readSessionCookies(context);
+        const firstDeadline = Date.now() + 15000;
+        let otpTarget = null;
+        while (Date.now() < firstDeadline && (!espnS2 || !swid)) {
+          otpTarget = await findOtpTarget(page);
+          if (otpTarget) break;
+          await page.waitForTimeout(750);
+          ({ espnS2, swid } = await readSessionCookies(context));
+        }
+
+        if ((!espnS2 || !swid) && otpTarget) {
+          marker('WATERBOYS_ESPN_LOGIN_CHALLENGE', 'otp_required');
+          const otp = await waitForLoginOtp(page, 8 * 60 * 1000);
+          if (!otp) {
+            marker('WATERBOYS_ESPN_OTP_RESULT', 'timeout');
+            process.exitCode = 37;
+          } else {
+            await fillOtpTarget(otpTarget, otp);
+            marker('WATERBOYS_ESPN_OTP_RESULT', 'submitted');
+            const verified = await maybeClick(page, /verify|continue|submit|next|log in|sign in/i);
+            if (!verified && otpTarget.kind === 'single') {
+              await otpTarget.input.press('Enter');
+            }
+
+            const otpDeadline = Date.now() + 45000;
+            while (Date.now() < otpDeadline && (!espnS2 || !swid)) {
+              await page.waitForTimeout(1000);
+              ({ espnS2, swid } = await readSessionCookies(context));
+            }
+          }
         }
 
         if (!espnS2 || !swid) {
           marker(
             'WATERBOYS_ESPN_LOGIN_CHALLENGE',
-            (await bodyHasChallenge(page)) ? 'after_password' : 'session_cookie_missing',
+            (await bodyHasChallenge(page)) ? 'after_verification' : 'session_cookie_missing',
           );
-          process.exitCode = 34;
+          process.exitCode = process.exitCode || 34;
         } else {
           const leagueId = Number(login.league.league_id);
           const season = Number(login.league.season);
