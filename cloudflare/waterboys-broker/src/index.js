@@ -102,7 +102,7 @@ async function verifyCaller(request) {
     || claims.ref !== 'refs/heads/main'
     || claims.repository_visibility !== 'public'
     || claims.runner_environment !== 'github-hosted'
-    || !['workflow_dispatch', 'schedule', 'repository_dispatch'].includes(String(claims.event_name || ''))
+    || !['workflow_dispatch', 'schedule', 'repository_dispatch', 'push'].includes(String(claims.event_name || ''))
     || String(claims.run_id || '') !== callerRunId
     || !Object.values(WORKFLOWS).includes(String(claims.workflow_ref || ''))
   ) {
