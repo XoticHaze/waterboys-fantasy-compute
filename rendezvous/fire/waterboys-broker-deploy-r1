@@ -1,0 +1,6 @@
+{
+  "schema": "waterboys.fire.v1",
+  "action": "broker_deploy",
+  "requested_by": "chatgpt",
+  "reason": "initial WaterBoys Cloudflare broker bootstrap after deployment credentials were provisioned"
+}
