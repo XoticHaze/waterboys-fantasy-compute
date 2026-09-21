@@ -1,0 +1,59 @@
+name: WaterBoys ESPN Anonymous Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'rendezvous/fire/waterboys-anonymous-probe-r1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: waterboys-anonymous-probe-r1
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Probe ESPN league without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          url = (
+              "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/"
+              "seasons/2026/segments/0/leagues/594260315?view=mTeam"
+          )
+          req = Request(
+              url,
+              headers={
+                  "Accept": "application/json",
+                  "User-Agent": "waterboys-fantasy-compute/0.1 anonymous-probe",
+              },
+          )
+          try:
+              with urlopen(req, timeout=20) as response:
+                  status = int(response.status)
+                  raw = response.read()
+          except HTTPError as exc:
+              status = int(exc.code)
+              raw = exc.read()
+
+          print(f"WATERBOYS_ESPN_ANON_HTTP={status}")
+
+          if status == 200:
+              node = json.loads(raw.decode("utf-8"))
+              teams = node.get("teams") if isinstance(node, dict) else None
+              print(f"WATERBOYS_ESPN_ANON_ACCESS=1")
+              print(f"WATERBOYS_ESPN_ANON_TEAM_COUNT={len(teams) if isinstance(teams, list) else -1}")
+              print(f"WATERBOYS_ESPN_ANON_HAS_SETTINGS={1 if isinstance(node.get('settings'), dict) else 0}")
+          else:
+              print("WATERBOYS_ESPN_ANON_ACCESS=0")
+          PY
