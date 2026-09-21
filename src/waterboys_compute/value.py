@@ -146,7 +146,7 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
     health = availability(candidate)
     risk = round(delta * health, 4)
     scarcity, replacement_name = replacement(candidate, free_agents)
-    return {
+    result = {
         "player_id": candidate.get("player_id"), "name": candidate.get("name"),
         "position": candidate.get("position"), "source_type": source,
         "source_team_id": source_team.get("team_id") if source_team else None,
