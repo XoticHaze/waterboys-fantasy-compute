@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from espn_api.football import League
 
-from .normalize import activity_node, box_score_node, player_node, team_node, utc_now
+from .normalize import (
+    activity_node,
+    player_node,
+    settings_node,
+    survival_node,
+    team_node,
+    utc_now,
+)
 
 
 def build_league(runtime: dict) -> League:
@@ -21,8 +28,24 @@ def build_league(runtime: dict) -> League:
 def collect_snapshot(runtime: dict) -> dict:
     league_cfg = runtime["league"]
     league = build_league(runtime)
+    current_week = getattr(league, "current_week", None)
+    nfl_week = getattr(league, "nfl_week", None)
 
-    teams = [team_node(team) for team in list(league.teams)]
+    league_settings = settings_node(league.settings)
+    acquisition_budget = league_settings.get("acquisition_budget")
+    if not isinstance(acquisition_budget, int):
+        configured = (league_cfg.get("waivers") or {}).get("faab_start")
+        acquisition_budget = int(configured) if isinstance(configured, int) else None
+
+    teams = [
+        team_node(
+            team,
+            current_week=current_week,
+            acquisition_budget=acquisition_budget,
+        )
+        for team in list(league.teams)
+    ]
+
     configured_team_id = league_cfg.get("team_id")
     configured_name = str(league_cfg.get("team_name") or "").strip().casefold()
 
@@ -37,26 +60,29 @@ def collect_snapshot(runtime: dict) -> dict:
     if waterboys is None:
         raise RuntimeError("WaterBoys team could not be resolved from authenticated league state")
 
-    current_week = getattr(league, "current_week", None)
     try:
-        matchups = [box_score_node(box) for box in league.box_scores()]
-    except Exception:
-        matchups = []
-
-    try:
-        free_agents = [player_node(player) for player in league.free_agents(size=500)]
+        free_agents = [
+            player_node(player, current_week=current_week)
+            for player in league.free_agents(size=500)
+        ]
     except Exception:
         free_agents = []
 
     try:
-        activity = [activity_node(row) for row in league.recent_activity(size=100)]
+        activity = [
+            activity_node(row)
+            for row in league.recent_activity(size=500)
+        ]
     except Exception:
         activity = []
 
-    if int(league_cfg.get("league_size") or 0) and len(teams) != int(league_cfg["league_size"]):
+    expected = int(league_cfg.get("league_size") or 0)
+    if expected and len(teams) != expected:
         raise RuntimeError(
-            f"league team count mismatch: expected {league_cfg['league_size']}, got {len(teams)}"
+            f"league team count mismatch: expected {expected}, got {len(teams)}"
         )
+
+    survival = survival_node(teams, waterboys.get("team_id"))
 
     return {
         "schema": "waterboys.snapshot.v1",
@@ -69,15 +95,38 @@ def collect_snapshot(runtime: dict) -> dict:
             "team_name": league_cfg.get("team_name"),
             "league_size": league_cfg.get("league_size"),
             "current_week": current_week,
-            "format": league_cfg.get("format"),
+            "nfl_week": nfl_week,
+            "format": {
+                **(league_cfg.get("format") or {}),
+                "all_play": True,
+            },
             "roster": league_cfg.get("roster"),
             "waivers": league_cfg.get("waivers"),
+            "settings": league_settings,
         },
         "waterboys": waterboys,
         "teams": teams,
-        "matchups": matchups,
+        "survival": survival,
         "free_agents": free_agents,
         "activity": activity,
+        "capabilities": {
+            "all_teams": len(teams) == expected if expected else bool(teams),
+            "all_team_rosters": all(
+                team.get("roster_count", 0) > 0
+                or any(
+                    e.get("team_id") == team.get("team_id")
+                    for e in survival.get("eliminated_teams", [])
+                )
+                for team in teams
+            ),
+            "free_agents": bool(free_agents),
+            "activity": bool(activity),
+            "faab": acquisition_budget is not None,
+            "trade_settings": league_settings.get("trade_deadline") is not None,
+            "weekly_player_stats": True,
+            "player_schedule": True,
+            "survival_state": True,
+        },
         "privacy": {
             "credentials_included": False,
             "tokens_included": False,
