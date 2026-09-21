@@ -4,6 +4,7 @@ from espn_api.football import League
 
 from .normalize import (
     activity_node,
+    market_node,
     player_node,
     settings_node,
     survival_node,
@@ -83,6 +84,7 @@ def collect_snapshot(runtime: dict) -> dict:
         )
 
     survival = survival_node(teams, waterboys.get("team_id"))
+    market = market_node(teams, free_agents, activity)
 
     return {
         "schema": "waterboys.snapshot.v1",
@@ -107,6 +109,7 @@ def collect_snapshot(runtime: dict) -> dict:
         "waterboys": waterboys,
         "teams": teams,
         "survival": survival,
+        "market": market,
         "free_agents": free_agents,
         "activity": activity,
         "capabilities": {
@@ -126,6 +129,7 @@ def collect_snapshot(runtime: dict) -> dict:
             "weekly_player_stats": True,
             "player_schedule": True,
             "survival_state": True,
+            "market_summary": True,
         },
         "privacy": {
             "credentials_included": False,
