@@ -83,12 +83,12 @@ async function fetchLoginOtp() {
   return node?.ready === true && /^\d{6,8}$/.test(otp) ? otp : '';
 }
 
-async function waitForLoginOtp(page, timeoutMs) {
+async function waitForLoginOtp(page, timeoutMs, baselineOtp = '') {
   marker('WATERBOYS_ESPN_OTP_WAITING', '1');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const otp = await fetchLoginOtp();
-    if (otp) {
+    if (otp && otp !== baselineOtp) {
       marker('WATERBOYS_ESPN_OTP_RECEIVED', '1');
       return otp;
     }
@@ -222,7 +222,9 @@ async function bodyHasChallenge(page) {
 }
 
 const login = await fetchLoginBootstrap();
+const baselineOtp = await fetchLoginOtp();
 marker('WATERBOYS_ESPN_LOGIN_BROKER', 'accepted');
+marker('WATERBOYS_ESPN_OTP_BASELINE_CAPTURED', baselineOtp ? '1' : '0');
 
 const browser = await chromium.launch({
   headless: false,
@@ -317,7 +319,7 @@ try {
 
         if ((!espnS2 || !swid) && otpTarget) {
           marker('WATERBOYS_ESPN_LOGIN_CHALLENGE', 'otp_required');
-          const otp = await waitForLoginOtp(page, 8 * 60 * 1000);
+          const otp = await waitForLoginOtp(page, 8 * 60 * 1000, baselineOtp);
           if (!otp) {
             marker('WATERBOYS_ESPN_OTP_RESULT', 'timeout');
             process.exitCode = 37;
