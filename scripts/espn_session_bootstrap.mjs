@@ -154,31 +154,37 @@ try {
   });
   await page.waitForTimeout(2500);
 
-  if (await bodyHasChallenge(page)) {
-    marker('WATERBOYS_ESPN_LOGIN_CHALLENGE', 'pre_form');
-    process.exitCode = 31;
-  } else {
-    const usernameSelectors = [
-      'input[type="email"]',
-      'input[autocomplete="username"]',
-      'input[name="loginValue"]',
-      'input[name*="email" i]',
-      'input[id*="email" i]',
-      'input[placeholder*="email" i]',
-      'input[aria-label*="email" i]',
-    ];
-    const passwordSelectors = [
-      'input[type="password"]',
-      'input[autocomplete="current-password"]',
-      'input[name*="password" i]',
-      'input[id*="password" i]',
-    ];
+  const usernameSelectors = [
+    'input[type="email"]',
+    'input[autocomplete="username"]',
+    'input[name="loginValue"]',
+    'input[name*="email" i]',
+    'input[name*="user" i]',
+    'input[name*="login" i]',
+    'input[id*="email" i]',
+    'input[id*="user" i]',
+    'input[id*="login" i]',
+    'input[placeholder*="email" i]',
+    'input[placeholder*="username" i]',
+    'input[aria-label*="email" i]',
+    'input[aria-label*="username" i]',
+  ];
+  const passwordSelectors = [
+    'input[type="password"]',
+    'input[autocomplete="current-password"]',
+    'input[name*="password" i]',
+    'input[id*="password" i]',
+  ];
 
-    const username = await waitForInput(page, usernameSelectors, 20000);
-    if (!username) {
-      marker('WATERBOYS_ESPN_LOGIN_FORM', 'username_not_found');
-      process.exitCode = 32;
-    } else {
+  const username = await waitForInput(page, usernameSelectors, 20000);
+  if (!username) {
+    marker(
+      'WATERBOYS_ESPN_LOGIN_CHALLENGE',
+      (await bodyHasChallenge(page)) ? 'pre_form' : 'username_not_found',
+    );
+    process.exitCode = 32;
+  } else {
+    marker('WATERBOYS_ESPN_LOGIN_FORM', 'username_found');
       await username.fill(login.username);
       marker('WATERBOYS_ESPN_LOGIN_FORM', 'username_filled');
 
@@ -255,7 +261,6 @@ try {
         }
       }
     }
-  }
 } finally {
   await browser.close();
 }
