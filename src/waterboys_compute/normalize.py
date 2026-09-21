@@ -188,6 +188,42 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
     if waterboys and cutline is not None and isinstance(waterboys.get("current_week_points"), (int, float)):
         margin = round(float(waterboys["current_week_points"]) - cutline, 4)
 
+    at_risk = ranked_actual[-1] if ranked_actual else None
+    next_above = ranked_actual[-2] if len(ranked_actual) >= 2 else None
+    gap_to_next = None
+    if (
+        at_risk
+        and next_above
+        and isinstance(at_risk.get("current_week_points"), (int, float))
+        and isinstance(next_above.get("current_week_points"), (int, float))
+    ):
+        gap_to_next = round(
+            float(next_above["current_week_points"]) - float(at_risk["current_week_points"]),
+            4,
+        )
+
+    at_risk_assets = []
+    if at_risk:
+        candidates = sorted(
+            [
+                player for player in (at_risk.get("roster") or [])
+                if player.get("position") not in {"D/ST", "K"}
+            ],
+            key=lambda player: float(player.get("projected_avg_points") or 0),
+            reverse=True,
+        )
+        at_risk_assets = [
+            {
+                "player_id": player.get("player_id"),
+                "name": player.get("name"),
+                "position": player.get("position"),
+                "projected_avg_points": player.get("projected_avg_points"),
+                "avg_points": player.get("avg_points"),
+                "injury_status": player.get("injury_status"),
+            }
+            for player in candidates[:10]
+        ]
+
     return {
         "mode": "all_play_knockout",
         "alive_team_count": len(alive),
@@ -195,6 +231,13 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
         "eliminated_teams": [{"team_id": team.get("team_id"), "name": team.get("name")} for team in eliminated],
         "current_week_cutline_points": cutline,
         "waterboys_margin_over_cutline": margin,
+        "elimination_watch": {
+            "team_id": at_risk.get("team_id") if at_risk else None,
+            "name": at_risk.get("name") if at_risk else None,
+            "points": at_risk.get("current_week_points") if at_risk else None,
+            "gap_to_next_team": gap_to_next,
+            "roster_release_watch": at_risk_assets,
+        },
         "current_week_ranking": [
             {
                 "rank": team.get("current_week_rank"),
