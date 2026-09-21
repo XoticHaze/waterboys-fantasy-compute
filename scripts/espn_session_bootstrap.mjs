@@ -1,0 +1,261 @@
+import fs from 'node:fs';
+import process from 'node:process';
+import { chromium } from 'playwright';
+
+const BROKER_URL = String(process.env.WATERBOYS_BROKER_URL || '').replace(/\/$/, '');
+const outputPath = process.argv[2];
+if (!BROKER_URL || !outputPath) {
+  throw new Error('bootstrap configuration missing');
+}
+
+function marker(name, value) {
+  process.stdout.write(`${name}=${value}\n`);
+}
+
+async function githubOidcToken() {
+  const raw = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+  const bearer = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  if (!raw || !bearer) throw new Error('github_oidc_environment_missing');
+  const url = new URL(raw);
+  url.searchParams.set('audience', 'waterboys-fantasy-compute');
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${bearer}`,
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) throw new Error(`github_oidc_http_${response.status}`);
+  const node = await response.json();
+  const token = String(node.value || '');
+  if (token.split('.').length !== 3) throw new Error('github_oidc_token_invalid');
+  return token;
+}
+
+async function fetchLoginBootstrap() {
+  const token = await githubOidcToken();
+  const response = await fetch(BROKER_URL + '/v1/login-bootstrap', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-WaterBoys-Caller-Run-Id': String(process.env.GITHUB_RUN_ID || ''),
+    },
+    body: '{}',
+  });
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const node = await response.json();
+      detail = String(node.error || '');
+    } catch {}
+    throw new Error(`login_broker_http_${response.status}:${detail}`);
+  }
+  const node = await response.json();
+  if (
+    !node
+    || typeof node.username !== 'string'
+    || !node.username
+    || typeof node.password !== 'string'
+    || !node.password
+    || !node.league
+  ) {
+    throw new Error('login_broker_payload_invalid');
+  }
+  return node;
+}
+
+async function firstVisibleInput(page, selectors) {
+  for (const frame of page.frames()) {
+    for (const selector of selectors) {
+      const locator = frame.locator(selector).first();
+      try {
+        if (await locator.count() && await locator.isVisible({ timeout: 300 })) {
+          return locator;
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
+async function firstVisibleButton(page, regex) {
+  for (const frame of page.frames()) {
+    const locator = frame.getByRole('button', { name: regex }).first();
+    try {
+      if (await locator.count() && await locator.isVisible({ timeout: 300 })) {
+        return locator;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function waitForInput(page, selectors, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = await firstVisibleInput(page, selectors);
+    if (found) return found;
+    await page.waitForTimeout(500);
+  }
+  return null;
+}
+
+async function maybeClick(page, regex) {
+  const button = await firstVisibleButton(page, regex);
+  if (!button) return false;
+  await button.click();
+  return true;
+}
+
+async function bodyHasChallenge(page) {
+  const patterns = [
+    /verify.*robot/i,
+    /captcha/i,
+    /verification code/i,
+    /security code/i,
+    /passcode/i,
+    /two[- ]step/i,
+    /two[- ]factor/i,
+    /confirm.*identity/i,
+  ];
+  for (const frame of page.frames()) {
+    try {
+      const text = await frame.locator('body').innerText({ timeout: 500 });
+      if (patterns.some((pattern) => pattern.test(text))) return true;
+    } catch {}
+  }
+  return false;
+}
+
+const login = await fetchLoginBootstrap();
+marker('WATERBOYS_ESPN_LOGIN_BROKER', 'accepted');
+
+const browser = await chromium.launch({
+  headless: false,
+  args: [
+    '--disable-dev-shm-usage',
+    '--no-default-browser-check',
+    '--no-first-run',
+  ],
+});
+
+try {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    timezoneId: 'America/Chicago',
+    viewport: { width: 1440, height: 1000 },
+  });
+  const page = await context.newPage();
+
+  await page.goto('https://www.espn.com/login', {
+    waitUntil: 'domcontentloaded',
+    timeout: 45000,
+  });
+  await page.waitForTimeout(2500);
+
+  if (await bodyHasChallenge(page)) {
+    marker('WATERBOYS_ESPN_LOGIN_CHALLENGE', 'pre_form');
+    process.exitCode = 31;
+  } else {
+    const usernameSelectors = [
+      'input[type="email"]',
+      'input[autocomplete="username"]',
+      'input[name="loginValue"]',
+      'input[name*="email" i]',
+      'input[id*="email" i]',
+      'input[placeholder*="email" i]',
+      'input[aria-label*="email" i]',
+    ];
+    const passwordSelectors = [
+      'input[type="password"]',
+      'input[autocomplete="current-password"]',
+      'input[name*="password" i]',
+      'input[id*="password" i]',
+    ];
+
+    const username = await waitForInput(page, usernameSelectors, 20000);
+    if (!username) {
+      marker('WATERBOYS_ESPN_LOGIN_FORM', 'username_not_found');
+      process.exitCode = 32;
+    } else {
+      await username.fill(login.username);
+      marker('WATERBOYS_ESPN_LOGIN_FORM', 'username_filled');
+
+      let password = await firstVisibleInput(page, passwordSelectors);
+      if (!password) {
+        await maybeClick(page, /continue|next|log in|sign in/i);
+        password = await waitForInput(page, passwordSelectors, 15000);
+      }
+      if (!password) {
+        const switched = await maybeClick(page, /use.*password|password.*instead|sign in.*password|log in.*password/i);
+        if (switched) password = await waitForInput(page, passwordSelectors, 10000);
+      }
+
+      if (!password) {
+        marker(
+          'WATERBOYS_ESPN_LOGIN_CHALLENGE',
+          (await bodyHasChallenge(page)) ? 'after_username' : 'password_not_found',
+        );
+        process.exitCode = 33;
+      } else {
+        await password.fill(login.password);
+        marker('WATERBOYS_ESPN_LOGIN_FORM', 'password_filled');
+        const submitted = await maybeClick(page, /log in|sign in|continue|submit/i);
+        if (!submitted) {
+          await password.press('Enter');
+        }
+
+        const deadline = Date.now() + 45000;
+        let espnS2 = '';
+        let swid = '';
+        while (Date.now() < deadline) {
+          const cookies = await context.cookies();
+          const s2Cookie = cookies.find((cookie) => cookie.name.toLowerCase() === 'espn_s2');
+          const swidCookie = cookies.find((cookie) => cookie.name.toLowerCase() === 'swid');
+          espnS2 = String(s2Cookie?.value || '');
+          swid = String(swidCookie?.value || '');
+          if (espnS2 && swid) break;
+          await page.waitForTimeout(1000);
+        }
+
+        if (!espnS2 || !swid) {
+          marker(
+            'WATERBOYS_ESPN_LOGIN_CHALLENGE',
+            (await bodyHasChallenge(page)) ? 'after_password' : 'session_cookie_missing',
+          );
+          process.exitCode = 34;
+        } else {
+          const leagueId = Number(login.league.league_id);
+          const season = Number(login.league.season);
+          const expectedTeams = Number(login.league.league_size);
+          const url =
+            `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mTeam`;
+          const response = await context.request.get(url, { timeout: 30000 });
+          marker('WATERBOYS_ESPN_SESSION_HTTP', String(response.status()));
+
+          if (!response.ok()) {
+            marker('WATERBOYS_ESPN_SESSION_VALID', '0');
+            process.exitCode = 35;
+          } else {
+            const node = await response.json();
+            const teams = Array.isArray(node?.teams) ? node.teams : [];
+            marker('WATERBOYS_ESPN_SESSION_TEAM_COUNT', String(teams.length));
+            if (expectedTeams && teams.length !== expectedTeams) {
+              marker('WATERBOYS_ESPN_SESSION_VALID', '0');
+              process.exitCode = 36;
+            } else {
+              const payload = JSON.stringify({ espn_s2: espnS2, swid }, null, 2) + '\n';
+              fs.writeFileSync(outputPath, payload, { encoding: 'utf8', mode: 0o600 });
+              fs.chmodSync(outputPath, 0o600);
+              marker('WATERBOYS_ESPN_SESSION_VALID', '1');
+              marker('WATERBOYS_ESPN_SESSION_COOKIES_CAPTURED', '2');
+            }
+          }
+        }
+      }
+    }
+  }
+} finally {
+  await browser.close();
+}

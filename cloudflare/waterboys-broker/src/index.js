@@ -5,6 +5,7 @@ const DEFAULT_OPS_REPO = 'XoticHaze/waterboys-fantasy-ops';
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 const WORKFLOWS = Object.freeze({
+  login: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/espn-session-bootstrap.yml@refs/heads/main',
   snapshot: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/snapshot.yml@refs/heads/main',
   execute: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/execute-command.yml@refs/heads/main',
 });
@@ -246,6 +247,29 @@ export default {
       if (request.method !== 'POST') return json({error: 'method_not_allowed'}, 405);
 
       const identity = await verifyCaller(request);
+
+      if (url.pathname === '/v1/login-bootstrap') {
+        requireWorkflow(identity, 'login');
+        const league = await readPrivateJson(env, 'config/league.json');
+        if (league.ready !== true || Number(league.league_id || 0) <= 0) {
+          return json({error: 'league_config_not_ready'}, 409);
+        }
+        const username = String(env.ESPN_USERNAME || '');
+        const password = String(env.ESPN_PASSWORD || '');
+        if (!username || !password) {
+          return json({error: 'espn_login_credentials_not_ready'}, 503);
+        }
+        return json({
+          username,
+          password,
+          league: {
+            league_id: Number(league.league_id),
+            season: Number(league.season),
+            league_size: Number(league.league_size),
+            team_name: String(league.team_name || ''),
+          },
+        });
+      }
 
       if (url.pathname === '/v1/runtime-config') {
         if (![WORKFLOWS.snapshot, WORKFLOWS.execute].includes(identity.workflow_ref)) {

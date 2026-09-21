@@ -27,6 +27,27 @@ class ContractTests(unittest.TestCase):
         self.assertIn("repository_visibility !== 'public'", worker)
         self.assertIn("runner_environment !== 'github-hosted'", worker)
 
+    def test_login_bootstrap_is_exact_workflow_gated_and_preserves_worker_secrets(self):
+        worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
+        self.assertIn("espn-session-bootstrap.yml@refs/heads/main", worker)
+        self.assertIn("url.pathname === '/v1/login-bootstrap'", worker)
+        self.assertIn("requireWorkflow(identity, 'login')", worker)
+
+        config = json.loads(
+            (ROOT / "cloudflare/waterboys-broker/wrangler.jsonc").read_text(encoding="utf-8")
+        )
+        self.assertIs(config.get("keep_vars"), True)
+
+        workflow = (ROOT / ".github/workflows/espn-session-bootstrap.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("xvfb-run -a node scripts/espn_session_bootstrap.mjs", workflow)
+        self.assertIn("WATERBOYS_ESPN_SESSION_PLAINTEXT_DESTROYED=1", workflow)
+        self.assertNotIn("secrets.ESPN_USERNAME", workflow)
+        self.assertNotIn("secrets.ESPN_PASSWORD", workflow)
+        self.assertNotIn("secrets.ESPN_S2", workflow)
+        self.assertNotIn("secrets.ESPN_SWID", workflow)
+
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
         self.assertIn("group: waterboys-snapshot-r1", text)

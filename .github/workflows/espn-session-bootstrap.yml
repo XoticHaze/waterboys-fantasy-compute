@@ -1,0 +1,87 @@
+name: WaterBoys ESPN Session Bootstrap R1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'rendezvous/fire/waterboys-espn-session-bootstrap-r1'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: waterboys-espn-session-bootstrap-r1
+  cancel-in-progress: false
+
+env:
+  WATERBOYS_BROKER_URL: https://waterboys-fantasy-broker.slenderiq.workers.dev
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Install browser bootstrap runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Mint and validate ESPN session
+        shell: bash
+        run: |
+          set -euo pipefail
+          session="$RUNNER_TEMP/waterboys-espn-session.json"
+          trap 'rm -f "$session"' EXIT
+          umask 077
+          xvfb-run -a node scripts/espn_session_bootstrap.mjs "$session"
+          test -s "$session"
+          test "$(stat -c '%a' "$session")" = "600"
+
+      - name: Store derived ESPN cookies as Worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          session="$RUNNER_TEMP/waterboys-espn-session.json"
+          test -s "$session"
+          python - "$session" <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          path = sys.argv[1]
+          with open(path, "r", encoding="utf-8") as fh:
+              node = json.load(fh)
+          values = {
+              "ESPN_S2": str(node.get("espn_s2") or ""),
+              "ESPN_SWID": str(node.get("swid") or ""),
+          }
+          if not all(values.values()):
+              raise SystemExit("derived ESPN session incomplete")
+          env = os.environ.copy()
+          config = "cloudflare/waterboys-broker/wrangler.jsonc"
+          for name, value in values.items():
+              subprocess.run(
+                  ["npx", "--yes", "wrangler@4.131.2", "secret", "put", name, "--config", config],
+                  input=value,
+                  text=True,
+                  check=True,
+                  env=env,
+              )
+          print("WATERBOYS_ESPN_SESSION_STORED=1")
+          PY
+          rm -f "$session"
+          echo 'WATERBOYS_ESPN_SESSION_PLAINTEXT_DESTROYED=1'
