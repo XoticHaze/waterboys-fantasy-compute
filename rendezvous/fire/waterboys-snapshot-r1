@@ -1,0 +1,7 @@
+{
+  "schema": "waterboys.fire.v1",
+  "action": "snapshot",
+  "league_id": 594260315,
+  "season": 2026,
+  "nonce": "first-authenticated-snapshot"
+}
