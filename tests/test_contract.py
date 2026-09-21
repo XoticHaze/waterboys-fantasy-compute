@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from waterboys_compute.command import execute_guarded
+from waterboys_compute.normalize import survival_node
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +54,20 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("secrets.ESPN_PASSWORD", workflow)
         self.assertNotIn("secrets.ESPN_S2", workflow)
         self.assertNotIn("secrets.ESPN_SWID", workflow)
+
+    def test_survival_node_models_all_play_cutline(self):
+        teams = [
+            {"team_id": 1, "name": "A", "roster_count": 14, "current_week_points": 120.0, "current_week_projected_points": 130.0},
+            {"team_id": 2, "name": "WaterBoys", "roster_count": 14, "current_week_points": 110.0, "current_week_projected_points": 140.0},
+            {"team_id": 3, "name": "Eliminated", "roster_count": 0, "current_week_points": None, "current_week_projected_points": None},
+        ]
+        node = survival_node(teams, 2)
+        self.assertEqual(node["alive_team_count"], 2)
+        self.assertEqual(node["eliminated_team_count"], 1)
+        self.assertEqual(node["current_week_cutline_points"], 110.0)
+        self.assertEqual(node["waterboys_margin_over_cutline"], 0.0)
+        self.assertEqual(teams[0]["current_week_rank"], 1)
+        self.assertEqual(teams[1]["current_week_projection_rank"], 1)
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
