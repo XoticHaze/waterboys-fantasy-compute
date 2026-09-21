@@ -41,7 +41,6 @@ jobs:
         run: |
           set -euo pipefail
           session="$RUNNER_TEMP/waterboys-espn-session.json"
-          trap 'rm -f "$session"' EXIT
           umask 077
           xvfb-run -a node scripts/espn_session_bootstrap.mjs "$session"
           test -s "$session"
@@ -55,6 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           session="$RUNNER_TEMP/waterboys-espn-session.json"
+          trap 'rm -f "$session"' EXIT
           test -s "$session"
           python - "$session" <<'PY'
           import json
@@ -83,5 +83,11 @@ jobs:
               )
           print("WATERBOYS_ESPN_SESSION_STORED=1")
           PY
-          rm -f "$session"
           echo 'WATERBOYS_ESPN_SESSION_PLAINTEXT_DESTROYED=1'
+
+      - name: Destroy temporary ESPN session on any outcome
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/waterboys-espn-session.json"
+          echo 'WATERBOYS_ESPN_SESSION_FINAL_CLEANUP=1'
