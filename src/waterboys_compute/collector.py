@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from espn_api.football import League
 
+from .value import build_value_engine
+
 from .normalize import (
     activity_node,
     market_node,
@@ -85,6 +87,19 @@ def collect_snapshot(runtime: dict) -> dict:
 
     survival = survival_node(teams, waterboys.get("team_id"))
     market = market_node(teams, free_agents, activity)
+    league_runtime = {
+        "roster": league_cfg.get("roster"),
+        "waivers": league_cfg.get("waivers"),
+        "current_week": current_week,
+    }
+    value_engine = build_value_engine(
+        waterboys,
+        teams,
+        free_agents,
+        survival,
+        league_runtime,
+        league_settings,
+    )
 
     return {
         "schema": "waterboys.snapshot.v1",
@@ -110,6 +125,7 @@ def collect_snapshot(runtime: dict) -> dict:
         "teams": teams,
         "survival": survival,
         "market": market,
+        "value_engine": value_engine,
         "free_agents": free_agents,
         "activity": activity,
         "capabilities": {
@@ -130,6 +146,7 @@ def collect_snapshot(runtime: dict) -> dict:
             "player_schedule": True,
             "survival_state": True,
             "market_summary": True,
+            "value_engine": True,
         },
         "privacy": {
             "credentials_included": False,
