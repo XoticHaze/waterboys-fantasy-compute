@@ -209,5 +209,116 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
     }
 
 
+
+def market_node(
+    teams: list[dict],
+    free_agents: list[dict],
+    activity: list[dict],
+) -> dict:
+    positions = ("QB", "RB", "WR", "TE", "D/ST", "K")
+
+    team_summaries = []
+    for team in teams:
+        roster = list(team.get("roster") or [])
+        counts = {
+            position: sum(1 for player in roster if player.get("position") == position)
+            for position in positions
+        }
+        core = sorted(
+            [
+                player for player in roster
+                if player.get("position") not in {"D/ST", "K"}
+            ],
+            key=lambda player: float(player.get("projected_avg_points") or 0),
+            reverse=True,
+        )[:6]
+        team_summaries.append({
+            "team_id": team.get("team_id"),
+            "name": team.get("name"),
+            "faab_remaining": team.get("acquisition_budget_remaining"),
+            "waiver_rank": team.get("waiver_rank"),
+            "trades": team.get("trades"),
+            "position_counts": counts,
+            "top_assets": [
+                {
+                    "player_id": player.get("player_id"),
+                    "name": player.get("name"),
+                    "position": player.get("position"),
+                    "projected_avg_points": player.get("projected_avg_points"),
+                    "avg_points": player.get("avg_points"),
+                    "injury_status": player.get("injury_status"),
+                }
+                for player in core
+            ],
+        })
+
+    free_agent_board = {}
+    for position in positions:
+        pool = [
+            player for player in free_agents
+            if player.get("position") == position
+        ]
+        pool.sort(
+            key=lambda player: (
+                bool(player.get("injured")),
+                -(float(player.get("projected_avg_points") or 0)),
+                -(float(player.get("percent_owned") or 0)),
+            )
+        )
+        free_agent_board[position] = [
+            {
+                "player_id": player.get("player_id"),
+                "name": player.get("name"),
+                "position": player.get("position"),
+                "injury_status": player.get("injury_status"),
+                "injured": player.get("injured"),
+                "avg_points": player.get("avg_points"),
+                "projected_avg_points": player.get("projected_avg_points"),
+                "percent_owned": player.get("percent_owned"),
+                "current_week_points": (player.get("current_week") or {}).get("points"),
+                "current_week_projected_points": (player.get("current_week") or {}).get("projected_points"),
+            }
+            for player in pool[:15]
+        ]
+
+    successful_waiver_bids = []
+    for row in activity:
+        for action in row.get("actions") or []:
+            if action.get("action") != "WAIVER ADDED":
+                continue
+            successful_waiver_bids.append({
+                "date": row.get("date"),
+                "team_id": action.get("team_id"),
+                "team": action.get("team"),
+                "player_id": action.get("player_id"),
+                "player": action.get("player"),
+                "bid": action.get("bid"),
+            })
+    successful_waiver_bids.sort(key=lambda row: int(row.get("date") or 0), reverse=True)
+
+    budget_leaderboard = sorted(
+        [
+            {
+                "team_id": team.get("team_id"),
+                "name": team.get("name"),
+                "remaining": team.get("acquisition_budget_remaining"),
+                "spent": team.get("acquisition_budget_spent"),
+            }
+            for team in teams
+            if team.get("roster_count", 0) > 0
+        ],
+        key=lambda row: (
+            -(int(row.get("remaining") or 0)),
+            int(row.get("spent") or 0),
+        ),
+    )
+
+    return {
+        "teams": team_summaries,
+        "free_agent_board": free_agent_board,
+        "successful_waiver_bids": successful_waiver_bids,
+        "budget_leaderboard": budget_leaderboard,
+    }
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
