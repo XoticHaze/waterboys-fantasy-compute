@@ -74,7 +74,8 @@ class ContractTests(unittest.TestCase):
 
     def test_value_engine_measures_marginal_lineup_gain(self):
         roster_cfg = {
-            "slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "DST": 1, "K": 1}
+            "slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "DST": 1, "K": 1},
+            "position_limits": {"QB": 2, "RB": 4, "WR": 4, "TE": 2, "DST": 3, "K": 2},
         }
         def p(pid, name, pos, proj, status="ACTIVE"):
             return {
@@ -99,6 +100,7 @@ class ContractTests(unittest.TestCase):
         free_agents = [
             p(100, "Cheap RB", "RB", 13.0),
             p(101, "Cheap WR", "WR", 12.0),
+            p(102, "Better DST", "D/ST", 13.0),
         ]
         at_risk = {
             "team_id": 3, "name": "At Risk", "roster_count": 14,
@@ -126,6 +128,12 @@ class ContractTests(unittest.TestCase):
         self.assertGreaterEqual(elite["faab_reference"]["midpoint"], 300)
         self.assertLessEqual(elite["faab_reference"]["midpoint"], 500)
         self.assertTrue(elite["faab_reference"]["advisory_only"])
+        self.assertGreater(elite["cost_efficiency"]["remaining_points_per_100_faab_at_midpoint"], 0)
+
+        better_dst = next(
+            row for row in engine["waiver_targets"] if row["name"] == "Better DST"
+        )
+        self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
