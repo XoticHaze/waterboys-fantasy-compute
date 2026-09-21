@@ -3,5 +3,5 @@
   "action": "snapshot",
   "league_id": 594260315,
   "season": 2026,
-  "nonce": "first-authenticated-snapshot"
+  "nonce": "post-bootstrap-secret-cleanup-proof"
 }
