@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from waterboys_compute.collector import collect_waiver_offers
-from waterboys_compute.command import execute_guarded
+from waterboys_compute.command import _live_authorized, execute_guarded
 from waterboys_compute.espn_write import build_transaction, redacted_transaction
 from waterboys_compute.normalize import survival_node
 from waterboys_compute.value import (
@@ -158,6 +158,45 @@ class ContractTests(unittest.TestCase):
             row for row in engine["waiver_targets"] if row["name"] == "Better DST"
         )
         self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
+
+    def test_live_authority_is_action_scoped_after_canary(self):
+        policy = {
+            "proven_actions": ["waiver_claim"],
+            "autonomy": {"routine_auto_execute": True},
+            "canary": {"enabled": False, "command_id": None, "action": None},
+        }
+        self.assertEqual(
+            _live_authorized(policy, "routine-waiver", "waiver_claim"),
+            (True, "proven_action_autonomy"),
+        )
+        allowed, reason = _live_authorized(policy, "routine-lineup", "lineup_move")
+        self.assertFalse(allowed)
+        self.assertIn("lineup_move", reason)
+
+        canary_policy = {
+            "proven_actions": [],
+            "autonomy": {"routine_auto_execute": False},
+            "canary": {
+                "enabled": True,
+                "command_id": "canary-waiver-001",
+                "action": "waiver_claim",
+            },
+        }
+        self.assertTrue(
+            _live_authorized(canary_policy, "canary-waiver-001", "waiver_claim")[0]
+        )
+        self.assertFalse(
+            _live_authorized(canary_policy, "canary-waiver-001", "lineup_move")[0]
+        )
+
+    def test_broker_clears_only_matching_completed_command_slot(self):
+        worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("function commandSlotIdentity(slot)", worker)
+        self.assertIn("clearCommandSlotIfMatched", worker)
+        self.assertIn("command_slot_moved", worker)
+        self.assertIn("'control/pending-command.json'", worker)
 
     def test_waiver_offer_compat_reads_mtransactions2_without_unreleased_helper(self):
         class FakeRequest:
