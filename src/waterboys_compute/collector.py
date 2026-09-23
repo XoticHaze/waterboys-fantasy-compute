@@ -79,6 +79,28 @@ def collect_snapshot(runtime: dict) -> dict:
     except Exception:
         activity = []
 
+    team_names = {team.get("team_id"): team.get("name") for team in teams}
+    try:
+        waiver_offers = []
+        for offer in league.offers_report(week=current_week):
+            player_id = getattr(offer, "player", None)
+            dropped_id = getattr(offer, "droppedPlayer", None)
+            date_time = getattr(offer, "dateTime", None)
+            waiver_offers.append({
+                "offer_id": getattr(offer, "id", None),
+                "date": date_time.isoformat() if date_time is not None else None,
+                "team_id": getattr(offer, "teamId", None),
+                "team": team_names.get(getattr(offer, "teamId", None)),
+                "player_id": player_id,
+                "player": league.player_map.get(player_id) if player_id is not None else None,
+                "dropped_player_id": dropped_id,
+                "dropped_player": league.player_map.get(dropped_id) if dropped_id is not None else None,
+                "result": getattr(offer, "result", None),
+                "bid": getattr(offer, "amount", None),
+            })
+    except Exception:
+        waiver_offers = []
+
     expected = int(league_cfg.get("league_size") or 0)
     if expected and len(teams) != expected:
         raise RuntimeError(
@@ -126,6 +148,7 @@ def collect_snapshot(runtime: dict) -> dict:
         "survival": survival,
         "market": market,
         "value_engine": value_engine,
+        "waiver_offers": waiver_offers,
         "free_agents": free_agents,
         "activity": activity,
         "capabilities": {
@@ -147,6 +170,7 @@ def collect_snapshot(runtime: dict) -> dict:
             "survival_state": True,
             "market_summary": True,
             "value_engine": True,
+            "waiver_offer_report": True,
         },
         "privacy": {
             "credentials_included": False,
