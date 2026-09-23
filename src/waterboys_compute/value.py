@@ -264,6 +264,7 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
             "avg_points": candidate.get("avg_points"),
             "injury_status": candidate.get("injury_status"),
             "acquisition_type": candidate.get("acquisition_type"),
+            "availability_status": candidate.get("availability_status"),
             "availability_factor": health,
         },
         "value": {
