@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from espn_api.football import League
 
 from .value import build_value_engine
@@ -26,6 +28,86 @@ def build_league(runtime: dict) -> League:
     if not espn_s2 or not swid:
         raise RuntimeError("ESPN runtime credentials are unavailable")
     return League(league_id=league_id, year=season, espn_s2=espn_s2, swid=swid)
+
+
+def collect_waiver_offers(
+    league: League,
+    current_week: int | None,
+    team_names: dict,
+    player_index: dict,
+) -> list[dict]:
+    weeks = range(1, max(1, int(current_week or 1)) + 1)
+    rows = []
+    seen = set()
+    for week in weeks:
+        params = {"scoringPeriodId": week, "view": "mTransactions2"}
+        filters = {
+            "transactions": {
+                "filterType": {"value": ["WAIVER", "WAIVER_ERROR"]}
+            }
+        }
+        data = league.espn_request.league_get(
+            params=params,
+            headers={"x-fantasy-filter": json.dumps(filters)},
+        )
+        for transaction in data.get("transactions", []) or []:
+            offer_id = str(transaction.get("id") or "")
+            if offer_id and offer_id in seen:
+                continue
+            if offer_id:
+                seen.add(offer_id)
+
+            added = next(
+                (
+                    item for item in transaction.get("items", []) or []
+                    if str(item.get("type") or "").upper() == "ADD"
+                ),
+                {},
+            )
+            dropped = next(
+                (
+                    item for item in transaction.get("items", []) or []
+                    if str(item.get("type") or "").upper() == "DROP"
+                ),
+                {},
+            )
+            player_id = added.get("playerId")
+            dropped_id = dropped.get("playerId")
+            player = player_index.get(player_id) or {}
+            dropped_player = player_index.get(dropped_id) or {}
+            status = str(transaction.get("status") or transaction.get("type") or "")
+            error_code = transaction.get("errorCode")
+            if error_code:
+                status = f"{status}:{error_code}" if status else str(error_code)
+
+            rows.append({
+                "offer_id": offer_id or None,
+                "week": week,
+                "date": transaction.get("processDate")
+                    or transaction.get("proposedDate")
+                    or transaction.get("date"),
+                "team_id": transaction.get("teamId"),
+                "team": team_names.get(transaction.get("teamId")),
+                "player_id": player_id,
+                "player": player.get("name")
+                    or (league.player_map.get(player_id) if player_id is not None else None),
+                "position": player.get("position"),
+                "projected_avg_points": player.get("projected_avg_points"),
+                "dropped_player_id": dropped_id,
+                "dropped_player": dropped_player.get("name")
+                    or (league.player_map.get(dropped_id) if dropped_id is not None else None),
+                "result": status or None,
+                "bid": transaction.get("bidAmount"),
+            })
+
+    rows.sort(
+        key=lambda row: (
+            int(row.get("date") or 0),
+            int(row.get("bid") or 0),
+        ),
+        reverse=True,
+    )
+    return rows
 
 
 def collect_snapshot(runtime: dict) -> dict:
@@ -80,26 +162,22 @@ def collect_snapshot(runtime: dict) -> dict:
         activity = []
 
     team_names = {team.get("team_id"): team.get("name") for team in teams}
+    player_index = {}
+    for team in teams:
+        for player in team.get("roster") or []:
+            player_index[player.get("player_id")] = player
+    for player in free_agents:
+        player_index.setdefault(player.get("player_id"), player)
+
     waiver_offer_report_available = False
     waiver_offer_report_error = None
     try:
-        waiver_offers = []
-        for offer in league.offers_report(week=current_week):
-            player_id = getattr(offer, "player", None)
-            dropped_id = getattr(offer, "droppedPlayer", None)
-            date_time = getattr(offer, "dateTime", None)
-            waiver_offers.append({
-                "offer_id": getattr(offer, "id", None),
-                "date": date_time.isoformat() if date_time is not None else None,
-                "team_id": getattr(offer, "teamId", None),
-                "team": team_names.get(getattr(offer, "teamId", None)),
-                "player_id": player_id,
-                "player": league.player_map.get(player_id) if player_id is not None else None,
-                "dropped_player_id": dropped_id,
-                "dropped_player": league.player_map.get(dropped_id) if dropped_id is not None else None,
-                "result": getattr(offer, "result", None),
-                "bid": getattr(offer, "amount", None),
-            })
+        waiver_offers = collect_waiver_offers(
+            league,
+            current_week,
+            team_names,
+            player_index,
+        )
         waiver_offer_report_available = True
     except Exception as exc:
         waiver_offers = []
