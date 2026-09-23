@@ -257,6 +257,8 @@ function buildBrief(snapshot, runId, stateCommit) {
     value: row && row.value,
     suggested_drop: row && row.suggested_drop,
     faab_reference: row && row.faab_reference,
+    market_reference: row && row.market_reference,
+    bid_guidance: row && row.bid_guidance,
     cost_efficiency: row && row.cost_efficiency,
   });
 
@@ -330,6 +332,7 @@ function buildBrief(snapshot, runId, stateCommit) {
     },
     recent_activity: (snapshot.activity || []).slice(0, 25),
     capabilities: snapshot.capabilities || {},
+    diagnostics: snapshot.diagnostics || {},
     privacy: snapshot.privacy || {},
   };
 }
