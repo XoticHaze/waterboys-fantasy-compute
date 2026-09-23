@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from waterboys_compute.collector import collect_waiver_offers
 from waterboys_compute.command import execute_guarded
 from waterboys_compute.espn_write import build_transaction, redacted_transaction
 from waterboys_compute.normalize import survival_node
@@ -157,6 +158,59 @@ class ContractTests(unittest.TestCase):
             row for row in engine["waiver_targets"] if row["name"] == "Better DST"
         )
         self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
+
+    def test_waiver_offer_compat_reads_mtransactions2_without_unreleased_helper(self):
+        class FakeRequest:
+            def league_get(self, params=None, headers=None):
+                self.params = params
+                self.headers = headers
+                return {
+                    "transactions": [
+                        {
+                            "id": "offer-1",
+                            "teamId": 7,
+                            "type": "WAIVER",
+                            "status": "EXECUTED",
+                            "processDate": 123456,
+                            "bidAmount": 51,
+                            "items": [
+                                {"type": "ADD", "playerId": 100},
+                                {"type": "DROP", "playerId": 200},
+                            ],
+                        },
+                        {
+                            "id": "offer-2",
+                            "teamId": 8,
+                            "type": "WAIVER_ERROR",
+                            "status": "FAILED",
+                            "errorCode": "OUTBID",
+                            "processDate": 123455,
+                            "bidAmount": 44,
+                            "items": [{"type": "ADD", "playerId": 100}],
+                        },
+                    ]
+                }
+
+        class FakeLeague:
+            def __init__(self):
+                self.espn_request = FakeRequest()
+                self.player_map = {100: "Premium RB", 200: "Roster Cut"}
+
+        player_index = {
+            100: {"name": "Premium RB", "position": "RB", "projected_avg_points": 30.0},
+            200: {"name": "Roster Cut", "position": "WR", "projected_avg_points": 7.0},
+        }
+        rows = collect_waiver_offers(
+            FakeLeague(),
+            1,
+            {7: "Winner", 8: "Runner Up"},
+            player_index,
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["bid"], 51)
+        self.assertEqual(rows[0]["position"], "RB")
+        self.assertEqual(rows[1]["bid"], 44)
+        self.assertIn("OUTBID", rows[1]["result"])
 
     def test_waiver_write_adapter_builds_faab_add_drop_without_leaking_member_id(self):
         runtime = {
