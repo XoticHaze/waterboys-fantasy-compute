@@ -204,6 +204,35 @@ async function readPrivateJson(env, path) {
   return JSON.parse(file.text);
 }
 
+function commandSlotIdentity(slot) {
+  if (!slot || slot.status !== 'pending') return '';
+  if (slot.command && typeof slot.command === 'object') {
+    return String(slot.command.command_id || '');
+  }
+  if (Array.isArray(slot.commands) && slot.commands.length) {
+    return String(slot.batch_id || '');
+  }
+  return '';
+}
+
+async function clearCommandSlotIfMatched(env, receiptCommandId) {
+  const current = await readPrivateJson(env, 'control/pending-command.json');
+  if (commandSlotIdentity(current) !== String(receiptCommandId || '')) {
+    return {cleared: false, reason: 'command_slot_moved'};
+  }
+  await githubWrite(
+    env,
+    'control/pending-command.json',
+    {
+      schema: 'waterboys.command_slot.v1',
+      status: 'empty',
+      command: null,
+    },
+    `command: clear completed WaterBoys command ${safeName(receiptCommandId)}`,
+  );
+  return {cleared: true};
+}
+
 async function readJsonBody(request) {
   const length = Number(request.headers.get('content-length') || 0);
   if (length > MAX_BODY_BYTES) throw new Error('body_too_large');
@@ -449,7 +478,13 @@ export default {
           receipt,
           `receipt: archive WaterBoys execution run ${identity.run_id}`,
         );
-        return json({ok: true, receipt_commit: latestSha, run_id: identity.run_id});
+        const commandSlot = await clearCommandSlotIfMatched(env, receipt.command_id);
+        return json({
+          ok: true,
+          receipt_commit: latestSha,
+          run_id: identity.run_id,
+          command_slot: commandSlot,
+        });
       }
 
       return json({error: 'not_found'}, 404);
