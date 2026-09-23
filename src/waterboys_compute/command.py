@@ -52,13 +52,19 @@ def _verify_snapshot(command: dict, fresh: dict) -> dict:
     return {"verified": False, "reason": f"no snapshot verifier for {action}"}
 
 
-def _live_authorized(write_policy: dict, command_id: str) -> tuple[bool, str]:
-    if write_policy.get("contract_status") == "proven":
-        return True, "proven_write_contract"
+def _live_authorized(write_policy: dict, command_id: str, action: str) -> tuple[bool, str]:
     canary = write_policy.get("canary") or {}
     if canary.get("enabled") is True and str(canary.get("command_id") or "") == command_id:
-        return True, "explicit_canary_command"
-    return False, "write contract is not proven and this command is not the authorized canary"
+        canary_action = str(canary.get("action") or "")
+        if not canary_action or canary_action == action:
+            return True, "explicit_canary_command"
+
+    proven_actions = set(write_policy.get("proven_actions") or [])
+    autonomy = write_policy.get("autonomy") or {}
+    if action in proven_actions and autonomy.get("routine_auto_execute") is True:
+        return True, "proven_action_autonomy"
+
+    return False, f"{action} is not proven for autonomous live execution and this command is not the authorized canary"
 
 
 def _execute_one(runtime: dict, command: dict, *, batch_live_allowed: bool = True) -> dict:
@@ -109,7 +115,7 @@ def _execute_one(runtime: dict, command: dict, *, batch_live_allowed: bool = Tru
             "preflight": _preflight_node(fresh),
         }
 
-    authorized, authority = _live_authorized(write_policy, command_id)
+    authorized, authority = _live_authorized(write_policy, command_id, action)
     if not authorized:
         return {
             "command_id": command_id,
