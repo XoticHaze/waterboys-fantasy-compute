@@ -373,6 +373,15 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(guidance["reservation_ceiling"], 460)
         self.assertLess(guidance["recommended"], guidance["reservation_ceiling"])
 
+    def test_broker_reads_large_private_files_via_git_blob_fallback(self):
+        worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("/git/blobs/", worker)
+        self.assertIn("github_blob_read_", worker)
+        self.assertIn("github_blob_invalid", worker)
+        self.assertIn("Contents API omits inline content", worker)
+
     def test_worker_persists_compact_takeover_brief(self):
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
         self.assertIn("function buildBrief(snapshot, runId, stateCommit)", worker)

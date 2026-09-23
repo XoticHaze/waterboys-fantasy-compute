@@ -158,10 +158,32 @@ async function githubRead(env, path) {
   const response = await fetch(url, {headers: githubHeaders(env)});
   if (!response.ok) throw new Error(`github_read_${response.status}`);
   const node = await response.json();
-  if (!node || node.type !== 'file' || !node.content) throw new Error('github_file_invalid');
+  if (!node || node.type !== 'file' || !node.sha) throw new Error('github_file_invalid');
+
+  if (node.content) {
+    return {
+      sha: String(node.sha),
+      text: base64ToText(node.content),
+    };
+  }
+  if (Number(node.size || 0) === 0) {
+    return {sha: String(node.sha), text: ''};
+  }
+
+  // GitHub's Contents API omits inline content for files above its response limit.
+  // Fall back to the Git Blob API so large private state files remain replaceable.
+  const blobResponse = await fetch(
+    `https://api.github.com/repos/${repo}/git/blobs/${encodeURIComponent(String(node.sha))}`,
+    {headers: githubHeaders(env)},
+  );
+  if (!blobResponse.ok) throw new Error(`github_blob_read_${blobResponse.status}`);
+  const blob = await blobResponse.json();
+  if (!blob || blob.encoding !== 'base64' || !blob.content) {
+    throw new Error('github_blob_invalid');
+  }
   return {
-    sha: String(node.sha || ''),
-    text: base64ToText(node.content),
+    sha: String(node.sha),
+    text: base64ToText(blob.content),
   };
 }
 
