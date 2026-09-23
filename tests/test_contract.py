@@ -72,6 +72,22 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(teams[0]["current_week_rank"], 1)
         self.assertEqual(teams[1]["current_week_projection_rank"], 1)
 
+    def test_survival_node_uses_projection_before_scoring_starts(self):
+        teams = [
+            {"team_id": 1, "name": "A", "roster_count": 14, "current_week_points": None, "current_week_projected_points": 150.0, "roster": []},
+            {"team_id": 2, "name": "WaterBoys", "roster_count": 14, "current_week_points": None, "current_week_projected_points": 160.0, "roster": []},
+            {"team_id": 3, "name": "C", "roster_count": 14, "current_week_points": None, "current_week_projected_points": 140.0, "roster": []},
+        ]
+        node = survival_node(teams, 2)
+        self.assertIsNone(node["current_week_cutline_points"])
+        self.assertEqual(node["projected_cutline_points"], 140.0)
+        self.assertEqual(node["waterboys_projected_margin_over_cutline"], 20.0)
+        self.assertEqual(node["elimination_watch"]["basis"], "projection")
+        self.assertEqual(node["elimination_watch"]["team_id"], 3)
+        self.assertEqual(node["elimination_watch"]["gap_to_next_team"], 10.0)
+        self.assertIsNone(teams[0]["current_week_rank"])
+        self.assertEqual(teams[1]["current_week_projection_rank"], 1)
+
     def test_value_engine_measures_marginal_lineup_gain(self):
         roster_cfg = {
             "slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1, "DST": 1, "K": 1},
@@ -134,6 +150,12 @@ class ContractTests(unittest.TestCase):
             row for row in engine["waiver_targets"] if row["name"] == "Better DST"
         )
         self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
+
+    def test_worker_persists_compact_takeover_brief(self):
+        worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
+        self.assertIn("function buildBrief(snapshot, runId, stateCommit)", worker)
+        self.assertIn("'state/brief.json'", worker)
+        self.assertIn("waterboys.brief.v1", worker)
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
