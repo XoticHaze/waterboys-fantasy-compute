@@ -240,6 +240,100 @@ function safeName(value) {
   return String(value || 'unknown').replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 160);
 }
 
+function buildBrief(snapshot, runId, stateCommit) {
+  const league = snapshot.league || {};
+  const settings = league.settings || {};
+  const waterboys = snapshot.waterboys || {};
+  const market = snapshot.market || {};
+  const value = snapshot.value_engine || {};
+
+  const compactTarget = (row) => ({
+    player_id: row && row.player_id,
+    name: row && row.name,
+    position: row && row.position,
+    source_type: row && row.source_type,
+    source_team: row && row.source_team,
+    inputs: row && row.inputs,
+    value: row && row.value,
+    suggested_drop: row && row.suggested_drop,
+    faab_reference: row && row.faab_reference,
+    cost_efficiency: row && row.cost_efficiency,
+  });
+
+  return {
+    schema: 'waterboys.brief.v1',
+    collected_at: snapshot.collected_at,
+    source_run_id: runId,
+    source_state_commit: stateCommit,
+    season: snapshot.season,
+    league: {
+      league_id: league.league_id,
+      league_name: league.league_name,
+      current_week: league.current_week,
+      nfl_week: league.nfl_week,
+      format: league.format,
+      roster: league.roster,
+      waivers: league.waivers,
+      settings: {
+        team_count: settings.team_count,
+        regular_season_count: settings.regular_season_count,
+        faab: settings.faab,
+        acquisition_budget: settings.acquisition_budget,
+        acquisition_limit: settings.acquisition_limit,
+        matchup_acquisition_limit: settings.matchup_acquisition_limit,
+        minimum_bid: settings.minimum_bid,
+        waiver_process_days: settings.waiver_process_days,
+        waiver_process_hour: settings.waiver_process_hour,
+        trade_deadline: settings.trade_deadline,
+        veto_votes_required: settings.veto_votes_required,
+      },
+    },
+    waterboys: {
+      team_id: waterboys.team_id,
+      name: waterboys.name,
+      standing: waterboys.standing,
+      wins: waterboys.wins,
+      losses: waterboys.losses,
+      points_for: waterboys.points_for,
+      waiver_rank: waterboys.waiver_rank,
+      acquisition_budget_remaining: waterboys.acquisition_budget_remaining,
+      current_week_points: waterboys.current_week_points,
+      current_week_projected_points: waterboys.current_week_projected_points,
+      current_week_rank: waterboys.current_week_rank,
+      current_week_projection_rank: waterboys.current_week_projection_rank,
+      roster: (waterboys.roster || []).map((player) => ({
+        player_id: player.player_id,
+        name: player.name,
+        position: player.position,
+        lineup_slot: player.lineup_slot,
+        pro_team: player.pro_team,
+        injury_status: player.injury_status,
+        avg_points: player.avg_points,
+        projected_avg_points: player.projected_avg_points,
+        current_week: player.current_week,
+      })),
+    },
+    survival: snapshot.survival || {},
+    market: {
+      budget_leaderboard: market.budget_leaderboard || [],
+      successful_waiver_bids: (market.successful_waiver_bids || []).slice(0, 25),
+      waiver_offers: (snapshot.waiver_offers || []).slice(0, 100),
+    },
+    value_engine: {
+      schema: value.schema,
+      status: value.status,
+      methodology: value.methodology,
+      waterboys_baseline: value.waterboys_baseline,
+      waiver_targets: (value.waiver_targets || []).slice(0, 25).map(compactTarget),
+      elimination_watch_targets: (value.elimination_watch_targets || []).slice(0, 15).map(compactTarget),
+      trade_targets: (value.trade_targets || []).slice(0, 25).map(compactTarget),
+    },
+    recent_activity: (snapshot.activity || []).slice(0, 25),
+    capabilities: snapshot.capabilities || {},
+    privacy: snapshot.privacy || {},
+  };
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -306,6 +400,13 @@ export default {
           snapshot,
           `snapshot: refresh WaterBoys state from run ${identity.run_id}`,
         );
+        const brief = buildBrief(snapshot, identity.run_id, latestSha);
+        const briefSha = await githubWrite(
+          env,
+          'state/brief.json',
+          brief,
+          `snapshot: refresh WaterBoys brief from run ${identity.run_id}`,
+        );
         const stamp = safeName(snapshot.collected_at);
         await githubWrite(
           env,
@@ -313,7 +414,12 @@ export default {
           snapshot,
           `snapshot: archive WaterBoys state from run ${identity.run_id}`,
         );
-        return json({ok: true, state_commit: latestSha, run_id: identity.run_id});
+        return json({
+          ok: true,
+          state_commit: latestSha,
+          brief_commit: briefSha,
+          run_id: identity.run_id,
+        });
       }
 
       if (url.pathname === '/v1/command/next') {
