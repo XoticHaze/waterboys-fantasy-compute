@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from waterboys_compute.command import execute_guarded
+from waterboys_compute.espn_write import build_transaction, redacted_transaction
 from waterboys_compute.normalize import survival_node
 from waterboys_compute.value import (
     build_value_engine,
@@ -155,6 +157,99 @@ class ContractTests(unittest.TestCase):
             row for row in engine["waiver_targets"] if row["name"] == "Better DST"
         )
         self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
+
+    def test_waiver_write_adapter_builds_faab_add_drop_without_leaking_member_id(self):
+        runtime = {
+            "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
+            "swid": "{TEST-SWID}",
+            "espn_s2": "test-secret",
+        }
+        fresh = {
+            "league": {"current_week": 3, "nfl_week": 3},
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [{"player_id": 4430834, "name": "Jalen McMillan"}],
+            },
+            "free_agents": [{"player_id": 4569371, "name": "Isaiah Williams"}],
+        }
+        command = {
+            "command_id": "waiver-isaiah-001",
+            "action": "waiver_claim",
+            "player_id": 4569371,
+            "drop_player_id": 4430834,
+            "faab_bid": 71,
+            "dry_run": True,
+        }
+        body = build_transaction(runtime, command, fresh)
+        self.assertEqual(body["type"], "WAIVER")
+        self.assertEqual(body["bidAmount"], 71)
+        self.assertEqual(body["teamId"], 18)
+        self.assertEqual(body["items"][0]["type"], "ADD")
+        self.assertEqual(body["items"][1]["type"], "DROP")
+        safe = redacted_transaction(body)
+        self.assertEqual(safe["memberId"], "[REDACTED]")
+        self.assertNotIn("test-secret", json.dumps(safe))
+
+    def test_command_lane_accepts_multiple_dry_run_claims(self):
+        fresh = {
+            "collected_at": "2026-09-23T19:00:00Z",
+            "league": {"current_week": 3, "nfl_week": 3},
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [
+                    {"player_id": 4430834, "name": "Jalen McMillan"},
+                    {"player_id": -16006, "name": "Cowboys D/ST"},
+                ],
+            },
+            "teams": [{"team_id": 18}],
+            "free_agents": [
+                {"player_id": 4569371, "name": "Isaiah Williams"},
+                {"player_id": 4428557, "name": "Tyjae Spears"},
+            ],
+        }
+        runtime = {
+            "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
+            "swid": "{TEST-SWID}",
+            "espn_s2": "test-secret",
+            "policy": {
+                "writes": {
+                    "enabled": False,
+                    "mode": "dry_run",
+                    "allowed_actions": ["waiver_claim"],
+                }
+            },
+        }
+        slot = {
+            "status": "pending",
+            "batch_id": "week3-claims-001",
+            "commands": [
+                {
+                    "command_id": "week3-isaiah",
+                    "action": "waiver_claim",
+                    "player_id": 4569371,
+                    "drop_player_id": 4430834,
+                    "faab_bid": 71,
+                    "dry_run": True,
+                },
+                {
+                    "command_id": "week3-spears",
+                    "action": "waiver_claim",
+                    "player_id": 4428557,
+                    "drop_player_id": -16006,
+                    "faab_bid": 5,
+                    "dry_run": True,
+                },
+            ],
+        }
+        with patch("waterboys_compute.command.collect_snapshot", return_value=fresh):
+            receipt = execute_guarded(runtime, slot)
+        self.assertEqual(receipt["status"], "batch_dry_run")
+        self.assertFalse(receipt["mutation_attempted"])
+        self.assertEqual(len(receipt["results"]), 2)
+        self.assertEqual(receipt["results"][0]["would_send"]["bidAmount"], 71)
+        self.assertEqual(receipt["results"][1]["would_send"]["bidAmount"], 5)
 
     def test_faab_guidance_uses_market_price_but_preserves_value_ceiling(self):
         candidate = {
