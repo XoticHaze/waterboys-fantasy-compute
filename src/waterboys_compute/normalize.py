@@ -362,11 +362,19 @@ def market_node(
             for player in pool[:15]
         ]
 
+    player_index = {}
+    for team in teams:
+        for player in team.get("roster") or []:
+            player_index[player.get("player_id")] = player
+    for player in free_agents:
+        player_index.setdefault(player.get("player_id"), player)
+
     successful_waiver_bids = []
     for row in activity:
         for action in row.get("actions") or []:
             if action.get("action") != "WAIVER ADDED":
                 continue
+            player = player_index.get(action.get("player_id")) or {}
             successful_waiver_bids.append({
                 "date": row.get("date"),
                 "team_id": action.get("team_id"),
@@ -374,6 +382,10 @@ def market_node(
                 "player_id": action.get("player_id"),
                 "player": action.get("player"),
                 "bid": action.get("bid"),
+                "position": player.get("position"),
+                "projected_avg_points": player.get("projected_avg_points"),
+                "avg_points": player.get("avg_points"),
+                "injury_status": player.get("injury_status"),
             })
     successful_waiver_bids.sort(key=lambda row: int(row.get("date") or 0), reverse=True)
 
