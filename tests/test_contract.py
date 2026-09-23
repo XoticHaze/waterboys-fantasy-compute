@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from waterboys_compute.collector import collect_waiver_offers
+from waterboys_compute.collector import collect_available_statuses, collect_waiver_offers
 from waterboys_compute.command import _live_authorized, execute_guarded
 from waterboys_compute.espn_write import build_transaction, redacted_transaction
 from waterboys_compute.normalize import survival_node
@@ -197,6 +197,26 @@ class ContractTests(unittest.TestCase):
         self.assertIn("clearCommandSlotIfMatched", worker)
         self.assertIn("command_slot_moved", worker)
         self.assertIn("'control/pending-command.json'", worker)
+
+    def test_available_status_probe_distinguishes_free_agent_and_waivers(self):
+        class FakeRequest:
+            def league_get(self, params=None, headers=None):
+                self.params = params
+                self.headers = headers
+                return {
+                    "players": [
+                        {"status": "FREEAGENT", "player": {"id": 100}},
+                        {"status": "WAIVERS", "player": {"id": 200}},
+                    ]
+                }
+
+        class FakeLeague:
+            def __init__(self):
+                self.espn_request = FakeRequest()
+
+        statuses = collect_available_statuses(FakeLeague(), 3)
+        self.assertEqual(statuses[100], "FREEAGENT")
+        self.assertEqual(statuses[200], "WAIVERS")
 
     def test_waiver_offer_compat_reads_mtransactions2_without_unreleased_helper(self):
         class FakeRequest:
