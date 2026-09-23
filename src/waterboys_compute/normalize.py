@@ -143,6 +143,12 @@ def settings_node(settings: Any) -> dict:
         "playoff_matchup_period_length": _attr(settings, "playoff_matchup_period_length"),
         "faab": bool(_attr(settings, "faab", default=False)),
         "acquisition_budget": _attr(settings, "acquisition_budget"),
+        "acquisition_limit": _attr(settings, "acquisition_limit"),
+        "matchup_acquisition_limit": _attr(settings, "matchup_acquisition_limit"),
+        "matchup_limit_per_scoring_period": _attr(settings, "matchup_limit_per_scoring_period"),
+        "minimum_bid": _attr(settings, "minimum_bid"),
+        "waiver_process_days": list(_attr(settings, "waiver_process_days", default=[]) or []),
+        "waiver_process_hour": _attr(settings, "waiver_process_hour"),
         "trade_deadline": _attr(settings, "trade_deadline"),
         "veto_votes_required": _attr(settings, "veto_votes_required"),
         "tie_rule": _attr(settings, "tie_rule"),
@@ -156,13 +162,6 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
     eliminated = [team for team in teams if int(team.get("roster_count") or 0) == 0]
     alive = [team for team in teams if int(team.get("roster_count") or 0) > 0]
 
-    ranked_actual = sorted(
-        alive,
-        key=lambda team: (
-            team.get("current_week_points") is None,
-            -(float(team.get("current_week_points") or 0)),
-        ),
-    )
     ranked_projection = sorted(
         alive,
         key=lambda team: (
@@ -170,9 +169,6 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
             -(float(team.get("current_week_projected_points") or 0)),
         ),
     )
-
-    for rank, team in enumerate(ranked_actual, start=1):
-        team["current_week_rank"] = rank
     for rank, team in enumerate(ranked_projection, start=1):
         team["current_week_projection_rank"] = rank
 
@@ -181,24 +177,60 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
         for team in alive
         if isinstance(team.get("current_week_points"), (int, float))
     ]
+    has_actual = bool(numeric_actual)
+
+    ranked_actual = sorted(
+        alive,
+        key=lambda team: (
+            team.get("current_week_points") is None,
+            -(float(team.get("current_week_points") or 0)),
+        ),
+    )
+    if has_actual:
+        for rank, team in enumerate(ranked_actual, start=1):
+            team["current_week_rank"] = rank
+    else:
+        for team in alive:
+            team["current_week_rank"] = None
+
     cutline = min(numeric_actual) if numeric_actual else None
+    projected_values = [
+        float(team["current_week_projected_points"])
+        for team in alive
+        if isinstance(team.get("current_week_projected_points"), (int, float))
+    ]
+    projected_cutline = min(projected_values) if projected_values else None
 
     waterboys = next((team for team in alive if team.get("team_id") == waterboys_team_id), None)
-    margin = None
+    actual_margin = None
+    projected_margin = None
     if waterboys and cutline is not None and isinstance(waterboys.get("current_week_points"), (int, float)):
-        margin = round(float(waterboys["current_week_points"]) - cutline, 4)
+        actual_margin = round(float(waterboys["current_week_points"]) - cutline, 4)
+    if (
+        waterboys
+        and projected_cutline is not None
+        and isinstance(waterboys.get("current_week_projected_points"), (int, float))
+    ):
+        projected_margin = round(
+            float(waterboys["current_week_projected_points"]) - projected_cutline,
+            4,
+        )
 
-    at_risk = ranked_actual[-1] if ranked_actual else None
-    next_above = ranked_actual[-2] if len(ranked_actual) >= 2 else None
+    basis = "actual" if has_actual else "projection"
+    watch_ranked = ranked_actual if has_actual else ranked_projection
+    at_risk = watch_ranked[-1] if watch_ranked else None
+    next_above = watch_ranked[-2] if len(watch_ranked) >= 2 else None
+    watch_key = "current_week_points" if has_actual else "current_week_projected_points"
+
     gap_to_next = None
     if (
         at_risk
         and next_above
-        and isinstance(at_risk.get("current_week_points"), (int, float))
-        and isinstance(next_above.get("current_week_points"), (int, float))
+        and isinstance(at_risk.get(watch_key), (int, float))
+        and isinstance(next_above.get(watch_key), (int, float))
     ):
         gap_to_next = round(
-            float(next_above["current_week_points"]) - float(at_risk["current_week_points"]),
+            float(next_above[watch_key]) - float(at_risk[watch_key]),
             4,
         )
 
@@ -224,17 +256,25 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
             for player in candidates[:10]
         ]
 
+    display_ranked = ranked_actual if has_actual else ranked_projection
     return {
         "mode": "all_play_knockout",
         "alive_team_count": len(alive),
         "eliminated_team_count": len(eliminated),
-        "eliminated_teams": [{"team_id": team.get("team_id"), "name": team.get("name")} for team in eliminated],
+        "eliminated_teams": [
+            {"team_id": team.get("team_id"), "name": team.get("name")}
+            for team in eliminated
+        ],
         "current_week_cutline_points": cutline,
-        "waterboys_margin_over_cutline": margin,
+        "projected_cutline_points": projected_cutline,
+        "waterboys_margin_over_cutline": actual_margin,
+        "waterboys_projected_margin_over_cutline": projected_margin,
         "elimination_watch": {
+            "basis": basis,
             "team_id": at_risk.get("team_id") if at_risk else None,
             "name": at_risk.get("name") if at_risk else None,
             "points": at_risk.get("current_week_points") if at_risk else None,
+            "projected_points": at_risk.get("current_week_projected_points") if at_risk else None,
             "gap_to_next_team": gap_to_next,
             "roster_release_watch": at_risk_assets,
         },
@@ -247,11 +287,9 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
                 "projected_points": team.get("current_week_projected_points"),
                 "projection_rank": team.get("current_week_projection_rank"),
             }
-            for team in ranked_actual
+            for team in display_ranked
         ],
     }
-
-
 
 def market_node(
     teams: list[dict],
