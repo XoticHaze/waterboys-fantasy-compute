@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from waterboys_compute.command import execute_guarded
+from waterboys_compute.espn_write import build_transaction, redacted_transaction
 from waterboys_compute.normalize import survival_node
-from waterboys_compute.value import build_value_engine, optimize
+from waterboys_compute.value import (
+    build_value_engine,
+    calibrated_bid_guidance,
+    market_reference,
+    optimize,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -151,11 +158,136 @@ class ContractTests(unittest.TestCase):
         )
         self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
 
+    def test_waiver_write_adapter_builds_faab_add_drop_without_leaking_member_id(self):
+        runtime = {
+            "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
+            "swid": "{TEST-SWID}",
+            "espn_s2": "test-secret",
+        }
+        fresh = {
+            "league": {"current_week": 3, "nfl_week": 3},
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [{"player_id": 4430834, "name": "Jalen McMillan"}],
+            },
+            "free_agents": [{"player_id": 4569371, "name": "Isaiah Williams"}],
+        }
+        command = {
+            "command_id": "waiver-isaiah-001",
+            "action": "waiver_claim",
+            "player_id": 4569371,
+            "drop_player_id": 4430834,
+            "faab_bid": 71,
+            "dry_run": True,
+        }
+        body = build_transaction(runtime, command, fresh)
+        self.assertEqual(body["type"], "WAIVER")
+        self.assertEqual(body["bidAmount"], 71)
+        self.assertEqual(body["teamId"], 18)
+        self.assertEqual(body["items"][0]["type"], "ADD")
+        self.assertEqual(body["items"][1]["type"], "DROP")
+        safe = redacted_transaction(body)
+        self.assertEqual(safe["memberId"], "[REDACTED]")
+        self.assertNotIn("test-secret", json.dumps(safe))
+
+    def test_command_lane_accepts_multiple_dry_run_claims(self):
+        fresh = {
+            "collected_at": "2026-09-23T19:00:00Z",
+            "league": {"current_week": 3, "nfl_week": 3},
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [
+                    {"player_id": 4430834, "name": "Jalen McMillan"},
+                    {"player_id": -16006, "name": "Cowboys D/ST"},
+                ],
+            },
+            "teams": [{"team_id": 18}],
+            "free_agents": [
+                {"player_id": 4569371, "name": "Isaiah Williams"},
+                {"player_id": 4428557, "name": "Tyjae Spears"},
+            ],
+        }
+        runtime = {
+            "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
+            "swid": "{TEST-SWID}",
+            "espn_s2": "test-secret",
+            "policy": {
+                "writes": {
+                    "enabled": False,
+                    "mode": "dry_run",
+                    "allowed_actions": ["waiver_claim"],
+                }
+            },
+        }
+        slot = {
+            "status": "pending",
+            "batch_id": "week3-claims-001",
+            "commands": [
+                {
+                    "command_id": "week3-isaiah",
+                    "action": "waiver_claim",
+                    "player_id": 4569371,
+                    "drop_player_id": 4430834,
+                    "faab_bid": 71,
+                    "dry_run": True,
+                },
+                {
+                    "command_id": "week3-spears",
+                    "action": "waiver_claim",
+                    "player_id": 4428557,
+                    "drop_player_id": -16006,
+                    "faab_bid": 5,
+                    "dry_run": True,
+                },
+            ],
+        }
+        with patch("waterboys_compute.command.collect_snapshot", return_value=fresh):
+            receipt = execute_guarded(runtime, slot)
+        self.assertEqual(receipt["status"], "batch_dry_run")
+        self.assertFalse(receipt["mutation_attempted"])
+        self.assertEqual(len(receipt["results"]), 2)
+        self.assertEqual(receipt["results"][0]["would_send"]["bidAmount"], 71)
+        self.assertEqual(receipt["results"][1]["would_send"]["bidAmount"], 5)
+
+    def test_faab_guidance_uses_market_price_but_preserves_value_ceiling(self):
+        candidate = {
+            "player_id": 900,
+            "name": "Premium RB",
+            "position": "RB",
+            "projected_avg_points": 30.0,
+        }
+        market = {
+            "successful_waiver_bids": [
+                {"player_id": 1, "player": "RB A", "position": "RB", "projected_avg_points": 29.0, "bid": 51},
+                {"player_id": 2, "player": "RB B", "position": "RB", "projected_avg_points": 18.0, "bid": 20},
+                {"player_id": 3, "player": "WR A", "position": "WR", "projected_avg_points": 27.0, "bid": 351},
+            ]
+        }
+        market_ref = market_reference(candidate, market, [])
+        self.assertEqual(market_ref["sample_basis"], "same_position_similar_projection")
+        self.assertEqual(market_ref["sample_size"], 1)
+        self.assertEqual(market_ref["p90"], 51)
+
+        guidance = calibrated_bid_guidance(
+            {"applicable": True, "low": 280, "midpoint": 400, "high": 460},
+            market_ref,
+            risk_delta=17.0,
+            budget=1000,
+        )
+        self.assertEqual(guidance["recommended"], 56)
+        self.assertEqual(guidance["reservation_ceiling"], 460)
+        self.assertLess(guidance["recommended"], guidance["reservation_ceiling"])
+
     def test_worker_persists_compact_takeover_brief(self):
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
         self.assertIn("function buildBrief(snapshot, runId, stateCommit)", worker)
         self.assertIn("'state/brief.json'", worker)
         self.assertIn("waterboys.brief.v1", worker)
+        self.assertIn("market_reference: row && row.market_reference", worker)
+        self.assertIn("bid_guidance: row && row.bid_guidance", worker)
+        self.assertIn("diagnostics: snapshot.diagnostics || {}", worker)
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")

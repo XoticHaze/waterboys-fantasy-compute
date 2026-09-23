@@ -81,6 +81,7 @@ def collect_snapshot(runtime: dict) -> dict:
 
     team_names = {team.get("team_id"): team.get("name") for team in teams}
     waiver_offer_report_available = False
+    waiver_offer_report_error = None
     try:
         waiver_offers = []
         for offer in league.offers_report(week=current_week):
@@ -100,8 +101,9 @@ def collect_snapshot(runtime: dict) -> dict:
                 "bid": getattr(offer, "amount", None),
             })
         waiver_offer_report_available = True
-    except Exception:
+    except Exception as exc:
         waiver_offers = []
+        waiver_offer_report_error = f"{type(exc).__name__}: {str(exc)[:240]}"
 
     expected = int(league_cfg.get("league_size") or 0)
     if expected and len(teams) != expected:
@@ -123,6 +125,8 @@ def collect_snapshot(runtime: dict) -> dict:
         survival,
         league_runtime,
         league_settings,
+        market=market,
+        waiver_offers=waiver_offers,
     )
 
     return {
@@ -151,6 +155,9 @@ def collect_snapshot(runtime: dict) -> dict:
         "market": market,
         "value_engine": value_engine,
         "waiver_offers": waiver_offers,
+        "diagnostics": {
+            "waiver_offer_report_error": waiver_offer_report_error,
+        },
         "free_agents": free_agents,
         "activity": activity,
         "capabilities": {

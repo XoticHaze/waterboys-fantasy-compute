@@ -137,8 +137,116 @@ def bid_range(candidate: dict, source: str, risk_delta: float, scarcity: float, 
     }
 
 
+def percentile(values: list[int], fraction: float) -> int | None:
+    clean = sorted(int(value) for value in values if isinstance(value, (int, float)) and value >= 0)
+    if not clean:
+        return None
+    index = int(round((len(clean) - 1) * max(0.0, min(1.0, fraction))))
+    return clean[index]
+
+
+def market_reference(candidate: dict, market: dict | None, waiver_offers: list[dict] | None) -> dict:
+    rows = []
+    seen = set()
+    for row in (market or {}).get("successful_waiver_bids") or []:
+        bid = row.get("bid")
+        if not isinstance(bid, (int, float)) or bid <= 0:
+            continue
+        key = (row.get("player_id"), row.get("team_id"), int(bid))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({
+            "player_id": row.get("player_id"),
+            "player": row.get("player"),
+            "position": row.get("position"),
+            "projected_avg_points": row.get("projected_avg_points"),
+            "bid": int(bid),
+            "kind": "winning_bid",
+        })
+
+    for row in waiver_offers or []:
+        bid = row.get("bid")
+        result = str(row.get("result") or "").upper()
+        if not isinstance(bid, (int, float)) or bid <= 0 or "PENDING" in result:
+            continue
+        key = (row.get("player_id"), row.get("team_id"), int(bid))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({
+            "player_id": row.get("player_id"),
+            "player": row.get("player"),
+            "position": row.get("position"),
+            "projected_avg_points": row.get("projected_avg_points"),
+            "bid": int(bid),
+            "kind": "processed_offer",
+        })
+
+    candidate_pos = candidate.get("position")
+    candidate_proj = num(candidate.get("projected_avg_points"))
+    same_position = [row for row in rows if row.get("position") == candidate_pos]
+    comparable = [
+        row for row in same_position
+        if isinstance(row.get("projected_avg_points"), (int, float))
+        and abs(float(row["projected_avg_points"]) - candidate_proj) <= max(4.0, candidate_proj * 0.30)
+    ]
+    sample = comparable or same_position or rows
+    bids = [row["bid"] for row in sample]
+    confidence = "high" if len(sample) >= 6 else "medium" if len(sample) >= 3 else "low"
+
+    return {
+        "sample_basis": (
+            "same_position_similar_projection" if comparable
+            else "same_position" if same_position
+            else "all_observed_winners_and_processed_offers"
+        ),
+        "sample_size": len(sample),
+        "confidence": confidence,
+        "median": percentile(bids, 0.50),
+        "p75": percentile(bids, 0.75),
+        "p90": percentile(bids, 0.90),
+        "max": max(bids) if bids else None,
+        "recent_comparables": sorted(sample, key=lambda row: row["bid"], reverse=True)[:5],
+    }
+
+
+def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta: float, budget: int) -> dict:
+    if not value_reference.get("applicable"):
+        return {"applicable": False, "reason": value_reference.get("reason")}
+
+    ceiling = int(value_reference.get("high") or value_reference.get("midpoint") or 0)
+    observed = int(market_ref.get("sample_size") or 0)
+    if observed <= 0:
+        return {
+            "applicable": True,
+            "confidence": "unpriced",
+            "recommended": int(value_reference.get("midpoint") or 0),
+            "reservation_ceiling": ceiling,
+            "reason": "No comparable league clearing-price sample yet; use value reference cautiously.",
+        }
+
+    median = int(market_ref.get("median") or 0)
+    p75 = int(market_ref.get("p75") or median)
+    p90 = int(market_ref.get("p90") or p75)
+    anchor = p90 if risk_delta >= 10 else p75 if risk_delta >= 3 else median
+    protection = max(1, int(round(max(1, budget) * 0.005)))
+    recommended = min(ceiling, max(1, anchor + protection))
+
+    return {
+        "applicable": True,
+        "confidence": market_ref.get("confidence"),
+        "recommended": recommended,
+        "reservation_ceiling": ceiling,
+        "market_anchor": anchor,
+        "protection_margin": protection,
+        "reason": "Recommended bid is market-clearing estimate plus protection, capped by player-value reservation ceiling.",
+    }
+
+
 def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: list[dict],
-                    roster_cfg: dict, weeks: int, budget: int, source_team: dict | None = None) -> dict:
+                    roster_cfg: dict, weeks: int, budget: int, source_team: dict | None = None,
+                    market: dict | None = None, waiver_offers: list[dict] | None = None) -> dict:
     roster = list(waterboys.get("roster") or [])
     base = optimize(roster, roster_cfg)
     new = optimize(roster + [candidate], roster_cfg)
@@ -168,6 +276,11 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
         "suggested_drop": suggest_drop(roster, candidate, new["ids"], roster_cfg),
         "faab_reference": bid_range(candidate, source, risk, scarcity, budget),
     }
+    market_ref = market_reference(candidate, market, waiver_offers)
+    result["market_reference"] = market_ref
+    result["bid_guidance"] = calibrated_bid_guidance(
+        result["faab_reference"], market_ref, risk, budget
+    )
     bid = result["faab_reference"]
     if bid.get("applicable") and int(bid.get("midpoint") or 0) > 0:
         midpoint = int(bid["midpoint"])
@@ -183,7 +296,8 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
 
 
 def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dict],
-                       survival: dict, league_cfg: dict, settings: dict) -> dict:
+                       survival: dict, league_cfg: dict, settings: dict,
+                       market: dict | None = None, waiver_offers: list[dict] | None = None) -> dict:
     roster_cfg = league_cfg.get("roster") or {}
     current_week = int(league_cfg.get("current_week") or 0)
     weeks = max(0, int(settings.get("regular_season_count") or current_week) - current_week)
@@ -191,7 +305,10 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
                  (league_cfg.get("waivers") or {}).get("faab_start") or 0)
 
     waivers = [
-        score_candidate(p, "free_agent", waterboys, free_agents, roster_cfg, weeks, budget)
+        score_candidate(
+            p, "free_agent", waterboys, free_agents, roster_cfg, weeks, budget,
+            market=market, waiver_offers=waiver_offers
+        )
         for p in free_agents if p.get("position") in {"QB", "RB", "WR", "TE", "D/ST", "K"}
     ]
 
@@ -200,8 +317,10 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
     releases = []
     if risk_team:
         releases = [
-            score_candidate(p, "elimination_watch", waterboys, free_agents, roster_cfg,
-                            weeks, budget, risk_team)
+            score_candidate(
+                p, "elimination_watch", waterboys, free_agents, roster_cfg,
+                weeks, budget, risk_team, market=market, waiver_offers=waiver_offers
+            )
             for p in risk_team.get("roster") or []
             if p.get("position") in {"QB", "RB", "WR", "TE", "D/ST", "K"}
         ]
@@ -211,7 +330,10 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
         if team.get("team_id") in {waterboys.get("team_id"), risk_id} or int(team.get("roster_count") or 0) <= 0:
             continue
         trades.extend(
-            score_candidate(p, "trade", waterboys, free_agents, roster_cfg, weeks, budget, team)
+            score_candidate(
+                p, "trade", waterboys, free_agents, roster_cfg, weeks, budget, team,
+                market=market, waiver_offers=waiver_offers
+            )
             for p in team.get("roster") or []
             if p.get("position") in {"QB", "RB", "WR", "TE"}
         )
@@ -232,7 +354,9 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
             "marginal_lineup_ppg": "Optimized WaterBoys lineup with candidate minus current optimized lineup.",
             "replacement_value": "Candidate projection minus best free alternative at the same position.",
             "health_factors": HEALTH,
-            "faab_reference": "Advisory heuristic, not an execution rule.",
+            "faab_reference": "Player-value reservation range; not a clearing-price estimate.",
+            "market_reference": "Observed league winning bids and processed waiver offers, preferring same-position/projection comparables.",
+            "bid_guidance": "Market anchor plus a small protection margin, capped by the player-value reservation ceiling.",
             "trade_targets": "Gross acquisition value; outgoing-player cost is not included.",
         },
         "waterboys_baseline": {
