@@ -15,3 +15,7 @@ Canonical private state lives in `XoticHaze/waterboys-fantasy-ops`.
 - Read collector: enabled after Cloudflare secrets/config are provisioned.
 - ESPN writes: dry-run only by default.
 - No dependency on MM-IBKR or CommandCenter execution queues.
+
+## Operator entry
+
+See `docs/OPERATOR_RUNNER.md` for the canonical snapshot refresh/fire-file procedure. Fresh-thread management context lives in the private ops repo `START_HERE.md`.
