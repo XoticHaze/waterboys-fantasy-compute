@@ -80,6 +80,7 @@ def collect_snapshot(runtime: dict) -> dict:
         activity = []
 
     team_names = {team.get("team_id"): team.get("name") for team in teams}
+    waiver_offer_report_available = False
     try:
         waiver_offers = []
         for offer in league.offers_report(week=current_week):
@@ -98,6 +99,7 @@ def collect_snapshot(runtime: dict) -> dict:
                 "result": getattr(offer, "result", None),
                 "bid": getattr(offer, "amount", None),
             })
+        waiver_offer_report_available = True
     except Exception:
         waiver_offers = []
 
@@ -170,7 +172,7 @@ def collect_snapshot(runtime: dict) -> dict:
             "survival_state": True,
             "market_summary": True,
             "value_engine": True,
-            "waiver_offer_report": True,
+            "waiver_offer_report": waiver_offer_report_available,
         },
         "privacy": {
             "credentials_included": False,
