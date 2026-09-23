@@ -110,6 +110,42 @@ def collect_waiver_offers(
     return rows
 
 
+def collect_available_statuses(
+    league: League,
+    current_week: int | None,
+    size: int = 500,
+) -> dict[int, str]:
+    params = {
+        "view": "kona_player_info",
+        "scoringPeriodId": current_week,
+    }
+    filters = {
+        "players": {
+            "filterStatus": {"value": ["FREEAGENT", "WAIVERS"]},
+            "filterSlotIds": {"value": []},
+            "limit": size,
+            "sortPercOwned": {"sortPriority": 1, "sortAsc": False},
+            "sortDraftRanks": {
+                "sortPriority": 100,
+                "sortAsc": True,
+                "value": "STANDARD",
+            },
+        }
+    }
+    data = league.espn_request.league_get(
+        params=params,
+        headers={"x-fantasy-filter": json.dumps(filters)},
+    )
+    statuses = {}
+    for row in data.get("players", []) or []:
+        player = row.get("player") or {}
+        player_id = player.get("id") or row.get("id")
+        status = row.get("status")
+        if isinstance(player_id, int) and isinstance(status, str) and status:
+            statuses[player_id] = status
+    return statuses
+
+
 def collect_snapshot(runtime: dict) -> dict:
     league_cfg = runtime["league"]
     league = build_league(runtime)
@@ -145,11 +181,26 @@ def collect_snapshot(runtime: dict) -> dict:
     if waterboys is None:
         raise RuntimeError("WaterBoys team could not be resolved from authenticated league state")
 
+    player_availability_status_error = None
     try:
         free_agents = [
             player_node(player, current_week=current_week)
             for player in league.free_agents(size=500)
         ]
+        try:
+            availability_statuses = collect_available_statuses(
+                league,
+                current_week,
+                size=500,
+            )
+            for player in free_agents:
+                player["availability_status"] = availability_statuses.get(
+                    player.get("player_id")
+                )
+        except Exception as exc:
+            player_availability_status_error = (
+                f"{type(exc).__name__}: {str(exc)[:240]}"
+            )
     except Exception:
         free_agents = []
 
@@ -235,6 +286,7 @@ def collect_snapshot(runtime: dict) -> dict:
         "waiver_offers": waiver_offers,
         "diagnostics": {
             "waiver_offer_report_error": waiver_offer_report_error,
+            "player_availability_status_error": player_availability_status_error,
         },
         "free_agents": free_agents,
         "activity": activity,
@@ -258,6 +310,11 @@ def collect_snapshot(runtime: dict) -> dict:
             "market_summary": True,
             "value_engine": True,
             "waiver_offer_report": waiver_offer_report_available,
+            "player_availability_status": (
+                bool(free_agents)
+                and player_availability_status_error is None
+                and any(player.get("availability_status") for player in free_agents)
+            ),
         },
         "privacy": {
             "credentials_included": False,
