@@ -6,7 +6,12 @@ from pathlib import Path
 
 from waterboys_compute.command import execute_guarded
 from waterboys_compute.normalize import survival_node
-from waterboys_compute.value import build_value_engine, optimize
+from waterboys_compute.value import (
+    build_value_engine,
+    calibrated_bid_guidance,
+    market_reference,
+    optimize,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -151,11 +156,43 @@ class ContractTests(unittest.TestCase):
         )
         self.assertEqual(better_dst["suggested_drop"]["position"], "D/ST")
 
+    def test_faab_guidance_uses_market_price_but_preserves_value_ceiling(self):
+        candidate = {
+            "player_id": 900,
+            "name": "Premium RB",
+            "position": "RB",
+            "projected_avg_points": 30.0,
+        }
+        market = {
+            "successful_waiver_bids": [
+                {"player_id": 1, "player": "RB A", "position": "RB", "projected_avg_points": 29.0, "bid": 51},
+                {"player_id": 2, "player": "RB B", "position": "RB", "projected_avg_points": 18.0, "bid": 20},
+                {"player_id": 3, "player": "WR A", "position": "WR", "projected_avg_points": 27.0, "bid": 351},
+            ]
+        }
+        market_ref = market_reference(candidate, market, [])
+        self.assertEqual(market_ref["sample_basis"], "same_position_similar_projection")
+        self.assertEqual(market_ref["sample_size"], 1)
+        self.assertEqual(market_ref["p90"], 51)
+
+        guidance = calibrated_bid_guidance(
+            {"applicable": True, "low": 280, "midpoint": 400, "high": 460},
+            market_ref,
+            risk_delta=17.0,
+            budget=1000,
+        )
+        self.assertEqual(guidance["recommended"], 56)
+        self.assertEqual(guidance["reservation_ceiling"], 460)
+        self.assertLess(guidance["recommended"], guidance["reservation_ceiling"])
+
     def test_worker_persists_compact_takeover_brief(self):
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
         self.assertIn("function buildBrief(snapshot, runId, stateCommit)", worker)
         self.assertIn("'state/brief.json'", worker)
         self.assertIn("waterboys.brief.v1", worker)
+        self.assertIn("market_reference: row && row.market_reference", worker)
+        self.assertIn("bid_guidance: row && row.bid_guidance", worker)
+        self.assertIn("diagnostics: snapshot.diagnostics || {}", worker)
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
