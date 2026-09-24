@@ -119,6 +119,16 @@ def build_transaction(runtime: dict, command: dict, fresh: dict) -> dict:
             base["bidAmount"] = bid
         return base
 
+    if action == "free_agent_drop":
+        player_id = command.get("player_id")
+        if not isinstance(player_id, int):
+            raise RuntimeError("free_agent_drop requires integer player_id")
+        base["type"] = "FREEAGENT"
+        base["items"] = [
+            {"playerId": player_id, "type": "DROP", "fromTeamId": team_id}
+        ]
+        return base
+
     if action == "waiver_cancel":
         transaction_id = str(command.get("transaction_id") or "")
         if not transaction_id:
@@ -177,6 +187,11 @@ def validate_preflight(command: dict, fresh: dict) -> None:
             raise RuntimeError("target player is not in the fresh available-player pool")
         drop_id = command.get("drop_player_id")
         if drop_id is not None and drop_id not in roster_ids:
+            raise RuntimeError("drop player is not on the fresh WaterBoys roster")
+
+    if action == "free_agent_drop":
+        player_id = command.get("player_id")
+        if player_id not in roster_ids:
             raise RuntimeError("drop player is not on the fresh WaterBoys roster")
 
     if action == "waiver_claim":
