@@ -304,6 +304,54 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(safe["memberId"], "[REDACTED]")
         self.assertNotIn("test-secret", json.dumps(safe))
 
+    def test_standalone_free_agent_drop_builds_and_dry_runs_without_mutation(self):
+        runtime = {
+            "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
+            "swid": "{TEST-SWID}",
+            "espn_s2": "test-secret",
+            "policy": {
+                "writes": {
+                    "enabled": True,
+                    "mode": "live",
+                    "allowed_actions": ["free_agent_drop"],
+                    "proven_actions": [],
+                    "autonomy": {"routine_auto_execute": True},
+                    "canary": {"enabled": False, "command_id": None, "action": None},
+                }
+            },
+        }
+        fresh = {
+            "collected_at": "2026-09-23T21:00:00Z",
+            "league": {"current_week": 3, "nfl_week": 3},
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [{"player_id": -16020, "name": "Jets D/ST"}],
+            },
+            "teams": [{"team_id": 18}],
+            "free_agents": [],
+        }
+        command = {
+            "command_id": "drop-dryrun-jets-001",
+            "action": "free_agent_drop",
+            "player_id": -16020,
+            "dry_run": True,
+        }
+        body = build_transaction(runtime, command, fresh)
+        self.assertEqual(body["type"], "FREEAGENT")
+        self.assertEqual(body["items"], [
+            {"playerId": -16020, "type": "DROP", "fromTeamId": 18}
+        ])
+
+        with patch("waterboys_compute.command.collect_snapshot", return_value=fresh):
+            receipt = execute_guarded(runtime, {
+                "status": "pending",
+                "command": command,
+            })
+        self.assertEqual(receipt["status"], "dry_run")
+        self.assertFalse(receipt["mutation_attempted"])
+        self.assertEqual(receipt["would_send"]["items"][0]["type"], "DROP")
+
     def test_command_lane_accepts_multiple_dry_run_claims(self):
         fresh = {
             "collected_at": "2026-09-23T19:00:00Z",
