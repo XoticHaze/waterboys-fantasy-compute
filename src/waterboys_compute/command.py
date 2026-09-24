@@ -35,6 +35,13 @@ def _verify_snapshot(command: dict, fresh: dict) -> dict:
             "drop_absent": drop_id is None or drop_id not in by_id,
         }
 
+    if action == "free_agent_drop":
+        player_id = command.get("player_id")
+        return {
+            "verified": player_id not in by_id,
+            "player_absent": player_id not in by_id,
+        }
+
     if action in {"lineup_move", "ir_move"}:
         moves = command.get("moves") if isinstance(command.get("moves"), list) else [command]
         checks = []
