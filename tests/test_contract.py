@@ -77,6 +77,9 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(node["waterboys_margin_over_cutline"], 0.0)
         self.assertEqual(node["elimination_watch"]["team_id"], 2)
         self.assertEqual(node["elimination_watch"]["gap_to_next_team"], 10.0)
+        self.assertEqual(node["projected_elimination_watch"]["team_id"], 1)
+        self.assertEqual(node["projected_elimination_watch"]["projected_points"], 130.0)
+        self.assertEqual(node["projected_elimination_watch"]["gap_to_next_team"], 10.0)
         self.assertEqual(teams[0]["current_week_rank"], 1)
         self.assertEqual(teams[1]["current_week_projection_rank"], 1)
 
@@ -93,6 +96,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(node["elimination_watch"]["basis"], "projection")
         self.assertEqual(node["elimination_watch"]["team_id"], 3)
         self.assertEqual(node["elimination_watch"]["gap_to_next_team"], 10.0)
+        self.assertEqual(node["projected_elimination_watch"]["team_id"], 3)
+        self.assertEqual(node["projected_elimination_watch"]["gap_to_next_team"], 10.0)
         self.assertIsNone(teams[0]["current_week_rank"])
         self.assertEqual(teams[1]["current_week_projection_rank"], 1)
 
