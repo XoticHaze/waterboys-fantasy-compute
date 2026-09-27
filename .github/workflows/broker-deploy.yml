@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - 'rendezvous/fire/waterboys-broker-deploy-r1'
-      - 'rendezvous/fire/waterboys-cloudflare-scope-audit-r1'
       - '.github/workflows/broker-deploy.yml'
       - 'cloudflare/waterboys-broker/**'
 
@@ -36,7 +35,6 @@ jobs:
             --outdir "$RUNNER_TEMP/waterboys-broker-dry-run"
 
   deploy:
-    if: ${{ !contains(github.event.head_commit.message, 'waterboys cloudflare scope audit') }}
     needs: contract
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -62,25 +60,3 @@ jobs:
           npx --yes wrangler@4.131.2 deploy \
             --config cloudflare/waterboys-broker/wrangler.jsonc
           echo 'WATERBOYS_BROKER_DEPLOYED=1'
-
-
-  scope_audit:
-    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, 'waterboys cloudflare scope audit') }}
-    permissions:
-      contents: write
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Audit existing WaterBoys Cloudflare deployment credential
-        run: |
-          set -euo pipefail
-          python scripts/cloudflare_scope_audit.py
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add rendezvous/receipts/waterboys-cloudflare-scope-audit-r1.json
-          git commit -m 'security: publish WaterBoys Cloudflare scope audit' || true
-          git push
