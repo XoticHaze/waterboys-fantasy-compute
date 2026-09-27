@@ -234,17 +234,18 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
             4,
         )
 
-    at_risk_assets = []
-    if at_risk:
+    def _release_assets(team: dict | None) -> list[dict]:
+        if not team:
+            return []
         candidates = sorted(
             [
-                player for player in (at_risk.get("roster") or [])
+                player for player in (team.get("roster") or [])
                 if player.get("position") not in {"D/ST", "K"}
             ],
             key=lambda player: float(player.get("projected_avg_points") or 0),
             reverse=True,
         )
-        at_risk_assets = [
+        return [
             {
                 "player_id": player.get("player_id"),
                 "name": player.get("name"),
@@ -255,6 +256,24 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
             }
             for player in candidates[:10]
         ]
+
+    at_risk_assets = _release_assets(at_risk)
+
+    projected_at_risk = ranked_projection[-1] if ranked_projection else None
+    projected_next_above = ranked_projection[-2] if len(ranked_projection) >= 2 else None
+    projected_gap_to_next = None
+    if (
+        projected_at_risk
+        and projected_next_above
+        and isinstance(projected_at_risk.get("current_week_projected_points"), (int, float))
+        and isinstance(projected_next_above.get("current_week_projected_points"), (int, float))
+    ):
+        projected_gap_to_next = round(
+            float(projected_next_above["current_week_projected_points"])
+            - float(projected_at_risk["current_week_projected_points"]),
+            4,
+        )
+    projected_at_risk_assets = _release_assets(projected_at_risk)
 
     display_ranked = ranked_actual if has_actual else ranked_projection
     return {
@@ -277,6 +296,15 @@ def survival_node(teams: list[dict], waterboys_team_id: int | None) -> dict:
             "projected_points": at_risk.get("current_week_projected_points") if at_risk else None,
             "gap_to_next_team": gap_to_next,
             "roster_release_watch": at_risk_assets,
+        },
+        "projected_elimination_watch": {
+            "basis": "projection",
+            "team_id": projected_at_risk.get("team_id") if projected_at_risk else None,
+            "name": projected_at_risk.get("name") if projected_at_risk else None,
+            "points": projected_at_risk.get("current_week_points") if projected_at_risk else None,
+            "projected_points": projected_at_risk.get("current_week_projected_points") if projected_at_risk else None,
+            "gap_to_next_team": projected_gap_to_next,
+            "roster_release_watch": projected_at_risk_assets,
         },
         "current_week_ranking": [
             {
