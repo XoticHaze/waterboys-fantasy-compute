@@ -45,3 +45,6 @@ class Broker:
 
     def publish_receipt(self, receipt: dict) -> dict:
         return self._post("/v1/receipt", receipt)
+
+    def publish_sniper_report(self, report: dict) -> dict:
+        return self._post("/v1/sniper-report", report)
