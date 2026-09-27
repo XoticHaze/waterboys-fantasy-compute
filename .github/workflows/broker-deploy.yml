@@ -56,6 +56,16 @@ jobs:
           else
             echo 'WATERBOYS_CLOUDFLARE_CREDENTIAL_ROUTE=LEGACY_FALLBACK'
           fi
+      - name: WaterBoys Cloudflare R2 scope preflight
+        if: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cloudflare_r2_scope_preflight.py
+
       - name: Deploy broker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 || secrets.CLOUDFLARE_API_TOKEN }}
