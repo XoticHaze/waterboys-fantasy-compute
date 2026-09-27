@@ -8,6 +8,7 @@ const WORKFLOWS = Object.freeze({
   login: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/espn-session-bootstrap.yml@refs/heads/main',
   snapshot: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/snapshot.yml@refs/heads/main',
   execute: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/execute-command.yml@refs/heads/main',
+  sniper: 'XoticHaze/waterboys-fantasy-compute/.github/workflows/sniper.yml@refs/heads/main',
 });
 
 function json(body, status = 200) {
@@ -379,6 +380,7 @@ function buildBrief(snapshot, runId, stateCommit) {
       waterboys_baseline: value.waterboys_baseline,
       waiver_targets: (value.waiver_targets || []).slice(0, 25).map(compactTarget),
       elimination_watch_targets: (value.elimination_watch_targets || []).slice(0, 15).map(compactTarget),
+      projected_elimination_watch_targets: (value.projected_elimination_watch_targets || []).slice(0, 15).map(compactTarget),
       trade_targets: (value.trade_targets || []).slice(0, 25).map(compactTarget),
     },
     recent_activity: (snapshot.activity || []).slice(0, 25),
@@ -429,22 +431,28 @@ export default {
       }
 
       if (url.pathname === '/v1/runtime-config') {
-        if (![WORKFLOWS.snapshot, WORKFLOWS.execute].includes(identity.workflow_ref)) {
+        if (![WORKFLOWS.snapshot, WORKFLOWS.execute, WORKFLOWS.sniper].includes(identity.workflow_ref)) {
           throw new Error('workflow_authority_rejected');
         }
         const league = await readPrivateJson(env, 'config/league.json');
         const policy = await readPrivateJson(env, 'config/policy.json');
+        const sniperFile = await githubReadOptional(env, 'config/sniper.json');
+        const sniperStateFile = await githubReadOptional(env, 'state/sniper.json');
+        const sniper = sniperFile ? JSON.parse(sniperFile.text) : null;
+        const sniper_state = sniperStateFile ? JSON.parse(sniperStateFile.text) : null;
         if (league.ready !== true || Number(league.league_id || 0) <= 0) {
           return json({error: 'league_config_not_ready'}, 409);
         }
         const espnS2 = String(env.ESPN_S2 || '');
         const swid = String(env.ESPN_SWID || '');
         if (!espnS2 || !swid) return json({error: 'espn_credentials_not_ready'}, 503);
-        return json({league, policy, espn_s2: espnS2, swid});
+        return json({league, policy, sniper, sniper_state, espn_s2: espnS2, swid});
       }
 
       if (url.pathname === '/v1/snapshot') {
-        requireWorkflow(identity, 'snapshot');
+        if (![WORKFLOWS.snapshot, WORKFLOWS.sniper].includes(identity.workflow_ref)) {
+          throw new Error('workflow_authority_rejected');
+        }
         const league = await readPrivateJson(env, 'config/league.json');
         const snapshot = await readJsonBody(request);
         validateSnapshot(snapshot, league);
@@ -481,8 +489,32 @@ export default {
         return json(await readPrivateJson(env, 'control/pending-command.json'));
       }
 
+      if (url.pathname === '/v1/sniper-report') {
+        requireWorkflow(identity, 'sniper');
+        const report = await readJsonBody(request);
+        if (!report || report.schema !== 'waterboys.sniper_report.v1') {
+          throw new Error('sniper_report_schema_rejected');
+        }
+        const latestSha = await githubWrite(
+          env,
+          'state/sniper.json',
+          report,
+          `sniper: refresh WaterBoys sniper state from run ${identity.run_id}`,
+        );
+        const stamp = safeName(report.created_at || new Date().toISOString());
+        await githubWrite(
+          env,
+          `history/sniper/${stamp}-run-${identity.run_id}.json`,
+          report,
+          `sniper: archive WaterBoys sniper report from run ${identity.run_id}`,
+        );
+        return json({ok: true, state_commit: latestSha, run_id: identity.run_id});
+      }
+
       if (url.pathname === '/v1/receipt') {
-        requireWorkflow(identity, 'execute');
+        if (![WORKFLOWS.execute, WORKFLOWS.sniper].includes(identity.workflow_ref)) {
+          throw new Error('workflow_authority_rejected');
+        }
         const receipt = await readJsonBody(request);
         if (!receipt || receipt.schema !== 'waterboys.execution_receipt.v1') {
           throw new Error('receipt_schema_rejected');
