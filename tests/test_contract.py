@@ -404,6 +404,53 @@ class ContractTests(unittest.TestCase):
         self.assertFalse(receipt["mutation_attempted"])
         self.assertEqual(receipt["would_send"]["items"][0]["type"], "DROP")
 
+    def test_waiver_cancel_is_idempotent_when_target_is_already_absent(self):
+        runtime = {
+            "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
+            "swid": "{TEST-SWID}",
+            "espn_s2": "test-secret",
+            "policy": {
+                "writes": {
+                    "enabled": True,
+                    "mode": "live",
+                    "allowed_actions": ["waiver_cancel"],
+                    "proven_actions": ["waiver_cancel"],
+                    "autonomy": {"routine_auto_execute": True},
+                    "canary": {"enabled": False, "command_id": None, "action": None},
+                }
+            },
+        }
+        fresh = {
+            "collected_at": "2026-09-27T00:00:00Z",
+            "league": {"current_week": 3, "nfl_week": 3},
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [],
+            },
+            "teams": [{"team_id": 18}],
+            "free_agents": [],
+        }
+        command = {
+            "command_id": "cancel-retry-001",
+            "action": "waiver_cancel",
+            "transaction_id": "already-gone",
+            "dry_run": False,
+        }
+        with (
+            patch("waterboys_compute.command.collect_snapshot", return_value=fresh),
+            patch(
+                "waterboys_compute.command.verify_cancel",
+                return_value={"verified": True, "transaction_id": "already-gone"},
+            ),
+            patch("waterboys_compute.command.post_transaction") as post_transaction,
+        ):
+            receipt = execute_guarded(runtime, {"status": "pending", "command": command})
+        self.assertEqual(receipt["status"], "verified")
+        self.assertFalse(receipt["mutation_attempted"])
+        self.assertIn("idempotently satisfied", receipt["reason"])
+        post_transaction.assert_not_called()
+
     def test_command_lane_accepts_multiple_dry_run_claims(self):
         fresh = {
             "collected_at": "2026-09-23T19:00:00Z",
