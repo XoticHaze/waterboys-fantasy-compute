@@ -228,7 +228,16 @@ def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = Non
     )
 
     max_actions = int(policy.get("max_actions_per_run") or 1)
-    selected = eligible[:max_actions]
+    selected = []
+    free_agent_selected = False
+    for row in eligible:
+        if len(selected) >= max_actions:
+            break
+        if row.get("action") == "free_agent_add":
+            if free_agent_selected:
+                continue
+            free_agent_selected = True
+        selected.append(row)
 
     observations = {
         str(row.get("player_id")): {
