@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "snapshot",
-  "nonce": "2026-09-26-post-waiver-reconciliation-verify",
-  "reason": "Verify canceled waiver reconciliation and final pre-Sunday WaterBoys state"
+  "nonce": "2026-09-26-late-strategy-rank-window",
+  "reason": "Fresh WaterBoys snapshot for elimination-pool targets, rank strategy, and FAAB timing"
 }
