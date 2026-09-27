@@ -30,6 +30,31 @@ def build_league(runtime: dict) -> League:
     return League(league_id=league_id, year=season, espn_s2=espn_s2, swid=swid)
 
 
+def collect_player_history(
+    runtime: dict,
+    player_ids: list[int],
+    current_week: int | None,
+) -> dict[int, dict]:
+    ids = sorted({int(pid) for pid in player_ids if isinstance(pid, int)})
+    if not ids:
+        return {}
+
+    league = build_league(runtime)
+    cards = league.player_info(playerId=ids)
+    if cards is None:
+        return {}
+    if not isinstance(cards, list):
+        cards = [cards]
+
+    result = {}
+    for card in cards:
+        node = player_node(card, current_week=current_week)
+        pid = node.get("player_id")
+        if isinstance(pid, int):
+            result[pid] = node
+    return result
+
+
 def collect_waiver_offers(
     league: League,
     current_week: int | None,
