@@ -271,6 +271,58 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(rows[1]["bid"], 44)
         self.assertIn("OUTBID", rows[1]["result"])
 
+    def test_waiver_offer_report_collapses_cancel_event_into_original_claim(self):
+        class FakeRequest:
+            def league_get(self, params=None, headers=None):
+                return {
+                    "transactions": [
+                        {
+                            "id": "claim-1",
+                            "teamId": 18,
+                            "type": "WAIVER",
+                            "status": "PENDING",
+                            "processDate": 200,
+                            "bidAmount": 1,
+                            "items": [
+                                {"type": "ADD", "playerId": 100},
+                                {"type": "DROP", "playerId": 200},
+                            ],
+                        },
+                        {
+                            "id": "cancel-1",
+                            "relatedTransactionId": "claim-1",
+                            "executionType": "CANCEL",
+                            "teamId": 18,
+                            "type": "WAIVER",
+                            "status": "CANCELED",
+                            "processDate": 201,
+                            "bidAmount": 1,
+                            "items": [
+                                {"type": "ADD", "playerId": 100},
+                                {"type": "DROP", "playerId": 200},
+                            ],
+                        },
+                    ]
+                }
+
+        class FakeLeague:
+            def __init__(self):
+                self.espn_request = FakeRequest()
+                self.player_map = {100: "Nick Folk", 200: "Jets D/ST"}
+
+        rows = collect_waiver_offers(
+            FakeLeague(),
+            1,
+            {18: "WaterBoys"},
+            {
+                100: {"name": "Nick Folk", "position": "K", "projected_avg_points": 9.62},
+                200: {"name": "Jets D/ST", "position": "D/ST", "projected_avg_points": 11.16},
+            },
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["offer_id"], "claim-1")
+        self.assertEqual(rows[0]["result"], "CANCELED")
+
     def test_waiver_write_adapter_builds_faab_add_drop_without_leaking_member_id(self):
         runtime = {
             "league": {"league_id": 594260315, "season": 2026, "team_id": 18},
@@ -430,6 +482,37 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(market_ref["sample_basis"], "same_position_similar_projection")
         self.assertEqual(market_ref["sample_size"], 1)
         self.assertEqual(market_ref["p90"], 51)
+
+    def test_faab_market_reference_excludes_canceled_offers(self):
+        candidate = {
+            "player_id": 900,
+            "name": "Premium RB",
+            "position": "RB",
+            "projected_avg_points": 30.0,
+        }
+        offers = [
+            {
+                "player_id": 1,
+                "player": "Canceled RB",
+                "team_id": 18,
+                "position": "RB",
+                "projected_avg_points": 30.0,
+                "bid": 99,
+                "result": "CANCELED",
+            },
+            {
+                "player_id": 2,
+                "player": "Processed RB",
+                "team_id": 7,
+                "position": "RB",
+                "projected_avg_points": 29.0,
+                "bid": 20,
+                "result": "FAILED:OUTBID",
+            },
+        ]
+        market_ref = market_reference(candidate, {"successful_waiver_bids": []}, offers)
+        self.assertEqual(market_ref["sample_size"], 1)
+        self.assertEqual(market_ref["p90"], 20)
 
         guidance = calibrated_bid_guidance(
             {"applicable": True, "low": 280, "midpoint": 400, "high": 460},
