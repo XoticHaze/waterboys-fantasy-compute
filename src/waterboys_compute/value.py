@@ -168,7 +168,11 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
     for row in waiver_offers or []:
         bid = row.get("bid")
         result = str(row.get("result") or "").upper()
-        if not isinstance(bid, (int, float)) or bid <= 0 or "PENDING" in result:
+        if (
+            not isinstance(bid, (int, float))
+            or bid <= 0
+            or any(marker in result for marker in ("PENDING", "CANCELED", "CANCELLED"))
+        ):
             continue
         key = (row.get("player_id"), row.get("team_id"), int(bid))
         if key in seen:
