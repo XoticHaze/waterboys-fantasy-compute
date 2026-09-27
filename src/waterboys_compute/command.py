@@ -134,6 +134,21 @@ def _execute_one(runtime: dict, command: dict, *, batch_live_allowed: bool = Tru
             "would_send": safe_body,
         }
 
+    if action == "waiver_cancel":
+        transaction_id = str(command.get("transaction_id") or "")
+        cancellation_state = verify_cancel(runtime, transaction_id)
+        if cancellation_state.get("verified") is True:
+            return {
+                "command_id": command_id,
+                "action": action,
+                "status": "verified",
+                "mutation_attempted": False,
+                "authority": authority,
+                "reason": "waiver transaction already absent; cancel is idempotently satisfied",
+                "preflight": _preflight_node(fresh),
+                "verification": cancellation_state,
+            }
+
     status_code, response = post_transaction(runtime, body)
 
     if action == "waiver_claim":
