@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute-command",
-  "nonce": "2026-09-26-cancel-stray-folk-001",
-  "reason": "Cancel stale pending Nick Folk waiver claim after fresh Week 3 review"
+  "nonce": "2026-09-26-cancel-stray-folk-retry-002",
+  "reason": "Retry stale Folk cancel after idempotent cancel hardening"
 }
