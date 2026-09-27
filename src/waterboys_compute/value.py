@@ -270,6 +270,10 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
             "acquisition_type": candidate.get("acquisition_type"),
             "availability_status": candidate.get("availability_status"),
             "availability_factor": health,
+            "percent_owned": candidate.get("percent_owned"),
+            "percent_started": candidate.get("percent_started"),
+            "positional_rank": candidate.get("positional_rank"),
+            "recent_form": candidate.get("recent_form") or {},
         },
         "value": {
             "marginal_lineup_ppg": delta,
