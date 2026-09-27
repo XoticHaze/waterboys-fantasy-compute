@@ -1,0 +1,6 @@
+{
+  "schema": "waterboys.fire.v1",
+  "action": "sniper",
+  "nonce": "initial-shadow-proof",
+  "reason": "Manual trigger surface for deterministic WaterBoys sniper"
+}
