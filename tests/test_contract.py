@@ -483,6 +483,16 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(market_ref["sample_size"], 1)
         self.assertEqual(market_ref["p90"], 51)
 
+        guidance = calibrated_bid_guidance(
+            {"applicable": True, "low": 280, "midpoint": 400, "high": 460},
+            market_ref,
+            risk_delta=17.0,
+            budget=1000,
+        )
+        self.assertEqual(guidance["recommended"], 56)
+        self.assertEqual(guidance["reservation_ceiling"], 460)
+        self.assertLess(guidance["recommended"], guidance["reservation_ceiling"])
+
     def test_faab_market_reference_excludes_canceled_offers(self):
         candidate = {
             "player_id": 900,
@@ -513,16 +523,6 @@ class ContractTests(unittest.TestCase):
         market_ref = market_reference(candidate, {"successful_waiver_bids": []}, offers)
         self.assertEqual(market_ref["sample_size"], 1)
         self.assertEqual(market_ref["p90"], 20)
-
-        guidance = calibrated_bid_guidance(
-            {"applicable": True, "low": 280, "midpoint": 400, "high": 460},
-            market_ref,
-            risk_delta=17.0,
-            budget=1000,
-        )
-        self.assertEqual(guidance["recommended"], 56)
-        self.assertEqual(guidance["reservation_ceiling"], 460)
-        self.assertLess(guidance["recommended"], guidance["reservation_ceiling"])
 
     def test_broker_reads_large_private_files_via_git_blob_fallback(self):
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(
