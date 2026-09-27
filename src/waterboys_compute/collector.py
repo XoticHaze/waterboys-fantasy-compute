@@ -82,6 +82,8 @@ def collect_waiver_offers(
 
             rows.append({
                 "offer_id": offer_id or None,
+                "related_offer_id": str(transaction.get("relatedTransactionId") or "") or None,
+                "execution_type": str(transaction.get("executionType") or "") or None,
                 "week": week,
                 "date": transaction.get("processDate")
                     or transaction.get("proposedDate")
@@ -99,6 +101,33 @@ def collect_waiver_offers(
                 "result": status or None,
                 "bid": transaction.get("bidAmount"),
             })
+
+    canceled_offer_ids = {
+        str(row.get("related_offer_id"))
+        for row in rows
+        if row.get("related_offer_id")
+        and (
+            str(row.get("execution_type") or "").upper() == "CANCEL"
+            or "CANCEL" in str(row.get("result") or "").upper()
+        )
+    }
+    if canceled_offer_ids:
+        collapsed = []
+        for row in rows:
+            is_cancel_event = (
+                row.get("related_offer_id") in canceled_offer_ids
+                and (
+                    str(row.get("execution_type") or "").upper() == "CANCEL"
+                    or "CANCEL" in str(row.get("result") or "").upper()
+                )
+            )
+            if is_cancel_event:
+                continue
+            if row.get("offer_id") in canceled_offer_ids:
+                row = dict(row)
+                row["result"] = "CANCELED"
+            collapsed.append(row)
+        rows = collapsed
 
     rows.sort(
         key=lambda row: (
