@@ -91,16 +91,38 @@ def main() -> int:
     live = policy.get("enabled") is True and str(policy.get("mode") or "").lower() == "live"
     if live:
         for cancel in report.get("cancel_actions") or []:
-            command = command_for_cancel(cancel, snapshot)
-            receipt = execute_guarded(runtime, {"status": "pending", "command": command})
-            broker_result = broker.publish_receipt(receipt)
-            executions.append({"receipt": receipt, "broker_result": broker_result})
+            try:
+                command = command_for_cancel(cancel, snapshot)
+                receipt = execute_guarded(runtime, {"status": "pending", "command": command})
+                broker_result = broker.publish_receipt(receipt)
+                executions.append({"receipt": receipt, "broker_result": broker_result})
+            except Exception as exc:
+                executions.append({
+                    "receipt": {
+                        "command_id": None,
+                        "status": "sniper_action_error",
+                        "mutation_attempted": False,
+                        "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                    },
+                    "broker_result": None,
+                })
 
         for selection in report.get("selected") or []:
-            command = command_for_selection(selection, snapshot)
-            receipt = execute_guarded(runtime, {"status": "pending", "command": command})
-            broker_result = broker.publish_receipt(receipt)
-            executions.append({"receipt": receipt, "broker_result": broker_result})
+            try:
+                command = command_for_selection(selection, snapshot)
+                receipt = execute_guarded(runtime, {"status": "pending", "command": command})
+                broker_result = broker.publish_receipt(receipt)
+                executions.append({"receipt": receipt, "broker_result": broker_result})
+            except Exception as exc:
+                executions.append({
+                    "receipt": {
+                        "command_id": None,
+                        "status": "sniper_action_error",
+                        "mutation_attempted": False,
+                        "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                    },
+                    "broker_result": None,
+                })
 
     report["executions"] = [
         {
