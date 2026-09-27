@@ -9,6 +9,7 @@ from waterboys_compute.collector import collect_available_statuses, collect_waiv
 from waterboys_compute.command import _live_authorized, execute_guarded
 from waterboys_compute.espn_write import build_transaction, redacted_transaction
 from waterboys_compute.normalize import survival_node
+from waterboys_compute.sniper import evaluate_candidate, plan_sniper
 from waterboys_compute.value import (
     build_value_engine,
     calibrated_bid_guidance,
@@ -593,6 +594,114 @@ class ContractTests(unittest.TestCase):
         self.assertIn("market_reference: row && row.market_reference", worker)
         self.assertIn("bid_guidance: row && row.bid_guidance", worker)
         self.assertIn("diagnostics: snapshot.diagnostics || {}", worker)
+
+    def test_sniper_prefers_free_material_upgrade_without_faab(self):
+        policy = {
+            "global_max_bid": 400,
+            "green_reserve_faab": 150,
+            "yellow_reserve_faab": 75,
+            "red_reserve_faab": 0,
+            "survival_bands": {"green_margin": 25, "yellow_margin": 12},
+            "tiers": [
+                {"name": "free_upgrade", "max_bid": 0, "min_risk_adjusted_marginal_ppg": 0.5, "min_expected_added_points_remaining": 5},
+                {"name": "cheap", "max_bid": 25, "min_risk_adjusted_marginal_ppg": 1.0, "min_expected_added_points_remaining": 10},
+            ],
+            "priority_caps": {},
+            "trap_guards": {
+                "injury": {"block_statuses": ["OUT", "INJURY_RESERVE", "DOUBTFUL"]},
+                "recent_form": {"min_games_for_large_bid": 2, "max_single_game_share_of_recent_points": 0.60},
+                "valuation": {"large_bid_threshold": 100, "max_projection_drop_pct_since_first_seen": 20},
+            },
+        }
+        snapshot = {
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [
+                    {"player_id": 10, "name": "Bench", "current_week": {"points": None}},
+                ],
+            },
+            "league": {"roster": {"size": 14}},
+            "survival": {"waterboys_projected_margin_over_cutline": 30},
+        }
+        row = {
+            "player_id": 20,
+            "name": "Free Upgrade",
+            "position": "WR",
+            "inputs": {
+                "availability_status": "FREEAGENT",
+                "injury_status": "ACTIVE",
+                "projected_avg_points": 20.0,
+                "avg_points": 18.0,
+                "percent_started": 50.0,
+                "recent_form": {"games_count": 2, "median": 18.0, "max_single_game_share": 0.55},
+            },
+            "value": {"risk_adjusted_marginal_ppg": 2.0, "expected_added_points_remaining": 28.0},
+            "suggested_drop": {"player_id": 10, "name": "Bench", "projected_avg_points": 10.0},
+            "bid_guidance": {"recommended": 9, "reservation_ceiling": 25},
+            "market_reference": {"confidence": "medium"},
+        }
+        result = evaluate_candidate(row, snapshot, policy)
+        self.assertTrue(result["eligible"])
+        self.assertEqual(result["action"], "free_agent_add")
+        self.assertEqual(result["selected_bid"], 0)
+
+    def test_sniper_blocks_large_questionable_or_outlier_bid(self):
+        policy = {
+            "global_max_bid": 400,
+            "green_reserve_faab": 150,
+            "yellow_reserve_faab": 75,
+            "red_reserve_faab": 0,
+            "survival_bands": {"green_margin": 25, "yellow_margin": 12},
+            "tiers": [
+                {"name": "cornerstone", "max_bid": 400, "min_risk_adjusted_marginal_ppg": 8.0, "min_expected_added_points_remaining": 80},
+            ],
+            "priority_caps": {"99": {"name": "Star", "max_bid": 350}},
+            "trap_guards": {
+                "injury": {"block_statuses": ["OUT", "INJURY_RESERVE", "DOUBTFUL"]},
+                "recent_form": {"min_games_for_large_bid": 2, "max_single_game_share_of_recent_points": 0.60},
+                "valuation": {"large_bid_threshold": 100, "max_projection_drop_pct_since_first_seen": 20},
+            },
+        }
+        snapshot = {
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 1000,
+                "roster": [{"player_id": 10, "current_week": {"points": None}}],
+            },
+            "league": {"roster": {"size": 14}},
+            "survival": {"waterboys_projected_margin_over_cutline": 30},
+        }
+        row = {
+            "player_id": 99,
+            "name": "Star",
+            "position": "RB",
+            "inputs": {
+                "availability_status": "WAIVERS",
+                "injury_status": "QUESTIONABLE",
+                "projected_avg_points": 30.0,
+                "avg_points": 25.0,
+                "percent_started": 90.0,
+                "recent_form": {"games_count": 2, "median": 20.0, "max_single_game_share": 0.80},
+            },
+            "value": {"risk_adjusted_marginal_ppg": 10.0, "expected_added_points_remaining": 140.0},
+            "suggested_drop": {"player_id": 10, "projected_avg_points": 12.0},
+            "bid_guidance": {"recommended": 200, "reservation_ceiling": 300},
+            "market_reference": {"confidence": "medium"},
+        }
+        result = evaluate_candidate(row, snapshot, policy)
+        self.assertFalse(result["eligible"])
+        self.assertIn("questionable_blocks_large_bid", result["reasons"])
+        self.assertIn("recent_scoring_outlier_concentration", result["reasons"])
+
+    def test_sniper_workflow_is_hourly_and_oidc_guarded(self):
+        workflow = (ROOT / ".github/workflows/sniper.yml").read_text(encoding="utf-8")
+        self.assertIn("cron: '7 * * * *'", workflow)
+        self.assertIn("id-token: write", workflow)
+        self.assertIn("waterboys_compute.cli snipe", workflow)
+        worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
+        self.assertIn("sniper.yml@refs/heads/main", worker)
+        self.assertIn("url.pathname === '/v1/sniper-report'", worker)
 
     def test_snapshot_workflow_has_dedicated_concurrency(self):
         text = (ROOT / ".github/workflows/snapshot.yml").read_text(encoding="utf-8")
