@@ -97,6 +97,20 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     signals = _confidence_signals(row)
     signal_count = sum(1 for ok in signals.values() if ok)
 
+    stash_cfg = policy.get("free_stash") or {}
+    if tier is None and availability == "FREEAGENT" and stash_cfg.get("enabled") is True:
+        scarcity = num(value.get("value_over_best_free_replacement_ppg"))
+        drop_projection = num((drop or {}).get("projected_avg_points"))
+        projection_edge = projection - drop_projection
+        if (
+            drop
+            and scarcity >= num(stash_cfg.get("min_replacement_scarcity_ppg") or 4.0)
+            and projection_edge >= num(stash_cfg.get("min_projection_over_drop_ppg") or 2.0)
+            and signal_count >= int(stash_cfg.get("min_independent_value_signals") or 2)
+        ):
+            tier = {"name": "free_stash", "max_bid": 0}
+            reasons = [reason for reason in reasons if reason != "below_value_floor"]
+
     requested_max = int(tier.get("max_bid") or 0) if tier else 0
     priority = (policy.get("priority_caps") or {}).get(str(row.get("player_id"))) or {}
     priority_cap = int(priority.get("max_bid") or requested_max or 0)
