@@ -1,0 +1,17 @@
+{
+  "broker_denied": false,
+  "mutation_performed": false,
+  "read_only": true,
+  "schema": "waterboys.cloudflare_deploy_scope_audit.r1",
+  "secrets_included": false,
+  "token_id": "2d2e801428e35d1dd3b6566918f6bb38",
+  "token_owner": "user",
+  "token_status": "active",
+  "waterboys_reachable": true,
+  "worker_settings_http": {
+    "reference-maintenance-authority-v1": 200,
+    "reference-release-broker-v1": 200,
+    "reference-release-maintainer-v1": 200,
+    "waterboys-fantasy-broker": 200
+  }
+}
