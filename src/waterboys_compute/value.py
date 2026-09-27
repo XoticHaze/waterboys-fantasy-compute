@@ -331,6 +331,19 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
             if p.get("position") in {"QB", "RB", "WR", "TE", "D/ST", "K"}
         ]
 
+    projected_risk_id = (survival.get("projected_elimination_watch") or {}).get("team_id")
+    projected_risk_team = next((t for t in teams if t.get("team_id") == projected_risk_id), None)
+    projected_releases = []
+    if projected_risk_team:
+        projected_releases = [
+            score_candidate(
+                p, "projected_elimination_watch", waterboys, free_agents, roster_cfg,
+                weeks, budget, projected_risk_team, market=market, waiver_offers=waiver_offers
+            )
+            for p in projected_risk_team.get("roster") or []
+            if p.get("position") in {"QB", "RB", "WR", "TE", "D/ST", "K"}
+        ]
+
     trades = []
     for team in teams:
         if team.get("team_id") in {waterboys.get("team_id"), risk_id} or int(team.get("roster_count") or 0) <= 0:
@@ -350,6 +363,7 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
     )
     waivers.sort(key=key, reverse=True)
     releases.sort(key=key, reverse=True)
+    projected_releases.sort(key=key, reverse=True)
     trades.sort(key=key, reverse=True)
     base = optimize(list(waterboys.get("roster") or []), roster_cfg)
 
@@ -372,5 +386,6 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
         },
         "waiver_targets": waivers[:75],
         "elimination_watch_targets": releases[:25],
+        "projected_elimination_watch_targets": projected_releases[:25],
         "trade_targets": trades[:75],
     }
