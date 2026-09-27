@@ -4,7 +4,7 @@ import argparse
 import json
 
 from .broker import Broker
-from .collector import collect_snapshot
+from .collector import collect_player_history, collect_snapshot
 from .command import execute_guarded
 from .sniper import command_for_cancel, command_for_selection, plan_sniper
 
@@ -43,10 +43,49 @@ def main() -> int:
         return 0
 
     snapshot = collect_snapshot(runtime)
-    snapshot_result = broker.publish_snapshot(snapshot)
     policy = runtime.get("sniper") or {}
     previous = runtime.get("sniper_state")
+
+    history_error = None
+    try:
+        waiver_rows = list(((snapshot.get("value_engine") or {}).get("waiver_targets") or []))
+        priority_ids = {
+            int(pid) for pid in (policy.get("priority_caps") or {})
+            if str(pid).lstrip("-").isdigit()
+        }
+        history_ids = [
+            row.get("player_id")
+            for row in waiver_rows[:30]
+            if isinstance(row.get("player_id"), int)
+        ]
+        history_ids.extend(
+            row.get("player_id")
+            for row in waiver_rows
+            if row.get("player_id") in priority_ids
+        )
+        history = collect_player_history(
+            runtime,
+            history_ids,
+            int((snapshot.get("league") or {}).get("current_week") or 0),
+        )
+        for row in waiver_rows:
+            card = history.get(row.get("player_id"))
+            if not card:
+                continue
+            inputs = row.setdefault("inputs", {})
+            inputs["recent_form"] = card.get("recent_form") or {}
+            inputs["percent_started"] = card.get("percent_started")
+            inputs["percent_owned"] = card.get("percent_owned")
+            inputs["avg_points"] = card.get("avg_points")
+            inputs["positional_rank"] = card.get("positional_rank")
+            if card.get("injury_status"):
+                inputs["injury_status"] = card.get("injury_status")
+    except Exception as exc:
+        history_error = f"{type(exc).__name__}: {str(exc)[:240]}"
+
+    snapshot_result = broker.publish_snapshot(snapshot)
     report = plan_sniper(snapshot, policy, previous)
+    report["history_hydration_error"] = history_error
     executions = []
 
     live = policy.get("enabled") is True and str(policy.get("mode") or "").lower() == "live"
