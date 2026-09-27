@@ -32,9 +32,46 @@ def _dict_week(stats: Any, week: int | None) -> dict:
     return {}
 
 
+def _recent_form(stats: Any, current_week: int | None, lookback: int = 3) -> dict:
+    if not isinstance(stats, dict) or not isinstance(current_week, int):
+        return {"games_count": 0, "points": [], "average": None, "median": None, "max_single_game_share": None}
+
+    rows = []
+    for raw_key, value in stats.items():
+        try:
+            week_num = int(raw_key)
+        except (TypeError, ValueError):
+            continue
+        if week_num <= 0 or week_num >= current_week or not isinstance(value, dict):
+            continue
+        points = value.get("points")
+        if isinstance(points, (int, float)):
+            rows.append((week_num, float(points)))
+
+    rows.sort(key=lambda row: row[0], reverse=True)
+    points = [row[1] for row in rows[:lookback]]
+    if not points:
+        return {"games_count": 0, "points": [], "average": None, "median": None, "max_single_game_share": None}
+
+    ordered = sorted(points)
+    middle = len(ordered) // 2
+    median = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2.0
+    positive_total = sum(max(0.0, value) for value in points)
+    max_share = max(max(0.0, value) for value in points) / positive_total if positive_total > 0 else None
+
+    return {
+        "games_count": len(points),
+        "points": [round(value, 4) for value in points],
+        "average": round(sum(points) / len(points), 4),
+        "median": round(median, 4),
+        "max_single_game_share": round(max_share, 4) if max_share is not None else None,
+    }
+
+
 def player_node(player: Any, current_week: int | None = None) -> dict:
     stats = _attr(player, "stats", default={}) or {}
     week = _dict_week(stats, current_week)
+    recent_form = _recent_form(stats, current_week)
     schedule = _attr(player, "schedule", default={}) or {}
     schedule_week = {}
     if isinstance(schedule, dict) and current_week is not None:
@@ -60,6 +97,7 @@ def player_node(player: Any, current_week: int | None = None) -> dict:
         "projected_avg_points": _attr(player, "projected_avg_points"),
         "percent_owned": _attr(player, "percent_owned"),
         "percent_started": _attr(player, "percent_started"),
+        "recent_form": recent_form,
         "current_week": {
             "week": current_week,
             "points": week.get("points"),
