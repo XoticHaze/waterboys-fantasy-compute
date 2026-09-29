@@ -1,0 +1,8 @@
+{
+  "control_plane_pass": true,
+  "credential_selection": "legacy_fallback",
+  "public_get_method_not_allowed_pass": true,
+  "schema": "waterboys.deploy_receipt.r2",
+  "secret_included": false,
+  "worker": "waterboys-fantasy-broker"
+}
