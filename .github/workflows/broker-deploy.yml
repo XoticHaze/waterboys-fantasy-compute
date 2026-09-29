@@ -36,42 +36,104 @@ jobs:
 
   deploy:
     needs: contract
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 12
+    env:
+      CLOUDFLARE_DEPLOY_TOKEN_R2: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 || secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - name: Require Cloudflare deployment credentials
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 || secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          if [ -n "${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 }}" ]; then
+          if [ -n "$CLOUDFLARE_DEPLOY_TOKEN_R2" ]; then
             echo 'WATERBOYS_CLOUDFLARE_CREDENTIAL_ROUTE=SCOPED_R2'
           else
             echo 'WATERBOYS_CLOUDFLARE_CREDENTIAL_ROUTE=LEGACY_FALLBACK'
           fi
       - name: WaterBoys Cloudflare R2 scope preflight
-        if: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 != '' }}
+        if: ${{ env.CLOUDFLARE_DEPLOY_TOKEN_R2 != '' }}
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_DEPLOY_TOKEN_R2 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
         shell: bash
         run: |
           set -euo pipefail
           python scripts/cloudflare_r2_scope_preflight.py
 
       - name: Deploy broker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 || secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
           npx --yes wrangler@4.131.2 deploy \
             --config cloudflare/waterboys-broker/wrangler.jsonc
           echo 'WATERBOYS_BROKER_DEPLOYED=1'
+
+      - name: Prove WaterBoys Worker and publish R2 receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          account=os.environ['CLOUDFLARE_ACCOUNT_ID'].strip()
+          token=os.environ['CLOUDFLARE_API_TOKEN'].strip()
+          settings=(
+              'https://api.cloudflare.com/client/v4/accounts/'
+              + account
+              + '/workers/scripts/waterboys-fantasy-broker/settings'
+          )
+          req=Request(settings,headers={
+              'Authorization':'Bearer '+token,
+              'Accept':'application/json',
+              'User-Agent':'waterboys-r2-deploy-proof',
+          })
+          with urlopen(req,timeout=30) as response:
+              node=json.load(response)
+          if node.get('success') is not True:
+              raise SystemExit('WaterBoys control-plane settings proof rejected')
+
+          public=Request(
+              'https://waterboys-fantasy-broker.slenderiq.workers.dev/',
+              method='GET',
+              headers={'User-Agent':'waterboys-r2-deploy-proof'},
+          )
+          try:
+              with urlopen(public,timeout=30) as response:
+                  public_status=int(response.status)
+          except HTTPError as exc:
+              public_status=int(exc.code)
+          if public_status != 405:
+              raise SystemExit('WaterBoys public fail-closed proof rejected: '+str(public_status))
+
+          receipt={
+              'schema':'waterboys.deploy_receipt.r2',
+              'worker':'waterboys-fantasy-broker',
+              'credential_selection':(
+                  'scoped_r2'
+                  if os.environ.get('CLOUDFLARE_DEPLOY_TOKEN_R2')
+                  else 'legacy_fallback'
+              ),
+              'control_plane_pass':True,
+              'public_get_method_not_allowed_pass':True,
+              'secret_included':False,
+          }
+          out=Path('rendezvous/receipts/waterboys-deploy-r2.json')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add rendezvous/receipts/waterboys-deploy-r2.json
+          git commit -m 'deploy: publish WaterBoys R2 receipt' || true
+          git push
