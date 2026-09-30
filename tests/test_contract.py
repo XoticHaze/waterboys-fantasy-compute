@@ -704,6 +704,10 @@ class ContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/sniper.yml").read_text(encoding="utf-8")
         self.assertIn("cron: '7 * * * *'", workflow)
         self.assertIn("id-token: write", workflow)
+
+        cli = (ROOT / "src/waterboys_compute/cli.py").read_text(encoding="utf-8")
+        self.assertIn("command_for_lineup_repair", cli)
+        self.assertIn("lineup_repair_count", cli)
         self.assertIn("waterboys_compute.cli snipe", workflow)
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(encoding="utf-8")
         self.assertIn("sniper.yml@refs/heads/main", worker)
