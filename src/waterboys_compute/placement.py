@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .value import FLEX, availability, num, score_candidate, slot_counts
+from .value import FLEX, availability, num, optimize as optimize_durable, score_candidate, slot_counts
 
 
 STARTER_SLOTS = {"QB", "RB", "WR", "TE", "RB/WR/TE", "FLEX", "D/ST", "K"}
@@ -117,6 +117,63 @@ def _release_assets(team: dict | None, limit: int = 8) -> list[dict]:
 
 
 def elimination_race(teams: list[dict], survival: dict, *, danger_points: float = 25.0) -> list[dict]:
+    pending_ids = {row.get("player_id") for row in pending_claim_rows}
+    next_launch_row = next(
+        (
+            row for row in durable_board
+            if row.get("acquisition_path") == "waiver"
+            and row.get("move_class") == "launch"
+            and row.get("player_id") not in pending_ids
+        ),
+        None,
+    )
+    pending_plus_launch = None
+    if next_launch_row:
+        launch_player = player_by_id.get(next_launch_row.get("player_id"))
+        if launch_player:
+            overlay_roster = list(pending_roster)
+            suggested_drop = next_launch_row.get("suggested_drop") or {}
+            drop_id = suggested_drop.get("player_id")
+            if isinstance(drop_id, int):
+                overlay_roster = [
+                    player for player in overlay_roster
+                    if player.get("player_id") != drop_id
+                ]
+            if not any(
+                player.get("player_id") == launch_player.get("player_id")
+                for player in overlay_roster
+            ):
+                overlay_roster.append(launch_player)
+            launch_bid = int((next_launch_row.get("bid_guidance") or {}).get("recommended") or 0)
+            overlay_claims = list(pending_applied) + [{
+                "player_id": launch_player.get("player_id"),
+                "player": launch_player.get("name"),
+                "bid": launch_bid,
+                "drop_player_id": drop_id,
+                "drop_player": suggested_drop.get("name"),
+                "status": "not_submitted_overlay",
+            }]
+            pending_plus_launch = _portfolio_projection(
+                "pending_plus_best_unsubmitted_launch",
+                overlay_roster,
+                overlay_claims,
+                pending_total_bid + launch_bid,
+                waterboys,
+                survival,
+                roster_cfg,
+                base_weekly_risk,
+                current_points,
+            )
+            pending_plus_launch["overlay_target"] = {
+                "player_id": next_launch_row.get("player_id"),
+                "name": next_launch_row.get("name"),
+                "recommended_bid": launch_bid,
+                "injury_status": next_launch_row.get("injury_status"),
+                "durable_risk_adjusted_marginal_ppg": next_launch_row.get(
+                    "durable_risk_adjusted_marginal_ppg"
+                ),
+            }
+
     cutline = survival.get("projected_cutline_points")
     team_by_id = _team_lookup(teams)
     rows = []
@@ -263,6 +320,77 @@ def _decorate_target(
     }
 
 
+def _apply_claims_to_roster(
+    roster: list[dict],
+    claims: list[dict],
+    player_by_id: dict,
+) -> tuple[list[dict], list[dict], int]:
+    result = list(roster)
+    applied = []
+    total_bid = 0
+    for claim in claims:
+        player_id = claim.get("player_id")
+        candidate = player_by_id.get(player_id)
+        if not candidate:
+            continue
+        drop_id = claim.get("dropped_player_id")
+        if isinstance(drop_id, int):
+            result = [player for player in result if player.get("player_id") != drop_id]
+        if not any(player.get("player_id") == player_id for player in result):
+            result.append(candidate)
+        bid = int(claim.get("bid") or 0)
+        total_bid += bid
+        applied.append({
+            "player_id": player_id,
+            "player": claim.get("player") or candidate.get("name"),
+            "bid": bid,
+            "drop_player_id": drop_id,
+            "drop_player": claim.get("dropped_player"),
+        })
+    return result, applied, total_bid
+
+
+def _portfolio_projection(
+    label: str,
+    roster_after: list[dict],
+    applied: list[dict],
+    total_bid: int,
+    waterboys: dict,
+    survival: dict,
+    roster_cfg: dict,
+    base_weekly_risk: dict,
+    current_points: float,
+) -> dict:
+    raw = optimize_weekly(roster_after, roster_cfg, risk_adjusted=False)
+    risk = optimize_weekly(roster_after, roster_cfg, risk_adjusted=True)
+    durable = optimize_durable(roster_after, roster_cfg)
+    risk_delta = round(
+        num(risk.get("risk_adjusted_projected_points"))
+        - num(base_weekly_risk.get("risk_adjusted_projected_points")),
+        4,
+    )
+    projected_points = round(current_points + risk_delta, 4)
+    rank = projected_rank(projected_points, survival, waterboys.get("team_id"))
+    current_rank = waterboys.get("current_week_projection_rank")
+    rank_gain = (
+        int(current_rank) - int(rank)
+        if isinstance(current_rank, int) and isinstance(rank, int)
+        else 0
+    )
+    return {
+        "label": label,
+        "claims": applied,
+        "total_bid_if_all_clear": total_bid,
+        "raw_optimized_weekly_points": raw.get("projected_points"),
+        "risk_adjusted_optimized_weekly_points": risk.get("risk_adjusted_projected_points"),
+        "risk_adjusted_weekly_gain": risk_delta,
+        "estimated_projected_points": projected_points,
+        "estimated_projection_rank": rank,
+        "estimated_rank_gain": rank_gain,
+        "durable_optimized_lineup_projected_ppg": durable.get("projected_ppg"),
+    }
+
+
 def build_placement_engine(
     waterboys: dict,
     teams: list[dict],
@@ -335,6 +463,27 @@ def build_placement_engine(
     )
 
     player_by_id = _player_lookup(teams, free_agents)
+
+    pending_claim_rows = [
+        row for row in (waiver_offers or [])
+        if row.get("team_id") == waterboys.get("team_id")
+        and "PENDING" in str(row.get("result") or "").upper()
+    ]
+    pending_roster, pending_applied, pending_total_bid = _apply_claims_to_roster(
+        roster, pending_claim_rows, player_by_id
+    )
+    pending_portfolio = _portfolio_projection(
+        "all_current_pending_claims",
+        pending_roster,
+        pending_applied,
+        pending_total_bid,
+        waterboys,
+        survival,
+        roster_cfg,
+        base_weekly_risk,
+        current_points,
+    )
+
     board = []
     seen = set()
 
@@ -473,6 +622,10 @@ def build_placement_engine(
         "best_acquisitions": board[:50],
         "weekly_rank_up_targets": weekly_board[:30],
         "durable_rank_up_targets": durable_board[:30],
+        "portfolio_scenarios": {
+            "pending_claims": pending_portfolio,
+            "pending_plus_best_launch": pending_plus_launch,
+        },
         "methodology": {
             "weekly_rank": (
                 "Simulates WaterBoys against current ESPN team projections while holding "
