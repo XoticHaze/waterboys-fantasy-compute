@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "snapshot",
-  "nonce": "2026-09-29-placement-engine-live-proof-2359-cdt",
-  "reason": "Live proof WaterBoys placement engine, elimination race, and acquisition board"
+  "nonce": "2026-09-30-weekly-durable-boards-proof-0003-cdt",
+  "reason": "Prove weekly and durable WaterBoys rank-up boards in canonical brief"
 }
