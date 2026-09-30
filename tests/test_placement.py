@@ -4,6 +4,7 @@ import unittest
 
 from waterboys_compute.placement import (
     build_placement_engine,
+    command_for_lineup_repair,
     elimination_race,
     optimize_weekly,
     projected_rank,
@@ -63,6 +64,44 @@ class PlacementEngineTests(unittest.TestCase):
         self.assertIn(4, ids)
         self.assertNotIn(2, ids)
         self.assertEqual(optimized["projected_points"], 145.0)
+
+        changes_snapshot = {
+            "collected_at": "2026-09-30T05:00:00Z",
+            "placement_engine": {
+                "lineup_optimizer": {
+                    "projected_lineup_leakage": 12.0,
+                    "recommended_changes": {
+                        "moves": [
+                            {"player_id": 2, "from_slot": "RB", "to_slot": "BE"},
+                            {"player_id": 4, "from_slot": "BE", "to_slot": "RB"},
+                        ],
+                        "auto_executable": True,
+                    },
+                }
+            },
+        }
+        command = command_for_lineup_repair(changes_snapshot)
+        self.assertEqual(command["action"], "lineup_move")
+        self.assertEqual(len(command["moves"]), 2)
+        self.assertFalse(command["dry_run"])
+
+    def test_lineup_repair_refuses_game_locked_moves(self):
+        snapshot = {
+            "collected_at": "2026-09-30T05:00:00Z",
+            "placement_engine": {
+                "lineup_optimizer": {
+                    "recommended_changes": {
+                        "moves": [
+                            {"player_id": 2, "from_slot": "RB", "to_slot": "BE"},
+                            {"player_id": 4, "from_slot": "BE", "to_slot": "RB"},
+                        ],
+                        "game_locked_player_ids": [2],
+                        "auto_executable": False,
+                    }
+                }
+            },
+        }
+        self.assertIsNone(command_for_lineup_repair(snapshot))
 
     def test_projected_rank_simulates_waterboys_move(self):
         survival = {
