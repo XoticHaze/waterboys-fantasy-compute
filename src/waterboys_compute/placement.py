@@ -188,7 +188,8 @@ def _decorate_target(
     waterboys: dict,
     survival: dict,
     roster_cfg: dict,
-    base_weekly: dict,
+    base_weekly_raw: dict,
+    base_weekly_risk: dict,
     current_points: float,
     current_rank: int | None,
     acquisition_path: str,
@@ -209,12 +210,12 @@ def _decorate_target(
             risk_adjusted=True,
         )
         weekly_delta = round(
-            num(after_raw.get("projected_points")) - num(base_weekly.get("projected_points")),
+            num(after_raw.get("projected_points")) - num(base_weekly_raw.get("projected_points")),
             4,
         )
         risk_weekly_delta = round(
             num(after_risk.get("risk_adjusted_projected_points"))
-            - num(base_weekly.get("risk_adjusted_projected_points")),
+            - num(base_weekly_risk.get("risk_adjusted_projected_points")),
             4,
         )
         post_points = round(current_points + risk_weekly_delta, 4)
@@ -348,6 +349,7 @@ def build_placement_engine(
             waterboys,
             survival,
             roster_cfg,
+            base_weekly,
             base_weekly_risk,
             current_points,
             current_rank,
@@ -365,6 +367,7 @@ def build_placement_engine(
             waterboys,
             survival,
             roster_cfg,
+            base_weekly,
             base_weekly_risk,
             current_points,
             current_rank,
@@ -382,6 +385,7 @@ def build_placement_engine(
             waterboys,
             survival,
             roster_cfg,
+            base_weekly,
             base_weekly_risk,
             current_points,
             current_rank,
