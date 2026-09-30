@@ -5,6 +5,7 @@ import json
 from espn_api.football import League
 
 from .value import build_value_engine
+from .placement import build_placement_engine
 
 from .normalize import (
     activity_node,
@@ -311,6 +312,17 @@ def collect_snapshot(runtime: dict) -> dict:
         market=market,
         waiver_offers=waiver_offers,
     )
+    placement_engine = build_placement_engine(
+        waterboys,
+        teams,
+        free_agents,
+        survival,
+        league_runtime,
+        league_settings,
+        value_engine,
+        market=market,
+        waiver_offers=waiver_offers,
+    )
 
     return {
         "schema": "waterboys.snapshot.v1",
@@ -337,6 +349,7 @@ def collect_snapshot(runtime: dict) -> dict:
         "survival": survival,
         "market": market,
         "value_engine": value_engine,
+        "placement_engine": placement_engine,
         "waiver_offers": waiver_offers,
         "diagnostics": {
             "waiver_offer_report_error": waiver_offer_report_error,
@@ -363,6 +376,7 @@ def collect_snapshot(runtime: dict) -> dict:
             "survival_state": True,
             "market_summary": True,
             "value_engine": True,
+            "placement_engine": True,
             "waiver_offer_report": waiver_offer_report_available,
             "player_availability_status": (
                 bool(free_agents)
