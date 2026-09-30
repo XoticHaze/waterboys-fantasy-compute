@@ -392,12 +392,32 @@ def build_placement_engine(
             "trade",
         ))
 
-    board.sort(
+    weekly_board = sorted(
+        board,
         key=lambda row: (
             int(row.get("estimated_rank_gain") or 0),
-            -int(row.get("estimated_post_move_projection_rank") or 999),
+            num(row.get("risk_adjusted_current_week_marginal_points")),
+            num(row.get("durable_risk_adjusted_marginal_ppg")),
+        ),
+        reverse=True,
+    )
+    durable_board = sorted(
+        board,
+        key=lambda row: (
             num(row.get("durable_risk_adjusted_marginal_ppg")),
             num(row.get("expected_added_points_remaining")),
+            int(row.get("estimated_rank_gain") or 0),
+        ),
+        reverse=True,
+    )
+    class_weight = {"launch": 2, "material": 1, "maintenance": 0}
+    board.sort(
+        key=lambda row: (
+            class_weight.get(str(row.get("move_class") or ""), 0),
+            num(row.get("durable_risk_adjusted_marginal_ppg"))
+            + 0.75 * int(row.get("estimated_rank_gain") or 0),
+            int(row.get("estimated_rank_gain") or 0),
+            num(row.get("risk_adjusted_current_week_marginal_points")),
         ),
         reverse=True,
     )
@@ -451,6 +471,8 @@ def build_placement_engine(
         "elimination_race": race,
         "future_elimination_targets": future_release_rows[:50],
         "best_acquisitions": board[:50],
+        "weekly_rank_up_targets": weekly_board[:30],
+        "durable_rank_up_targets": durable_board[:30],
         "methodology": {
             "weekly_rank": (
                 "Simulates WaterBoys against current ESPN team projections while holding "
@@ -464,6 +486,12 @@ def build_placement_engine(
                 "Uses risk-adjusted current-week marginal lineup points where player weekly "
                 "projections are available. Trade rows remain gross because outgoing trade "
                 "cost is not modeled."
+            ),
+            "boards": (
+                "best_acquisitions blends durable value with immediate rank gain; "
+                "weekly_rank_up_targets prioritizes this week's placement; "
+                "durable_rank_up_targets preserves season-long launch targets even when "
+                "a current-week projection is missing or suppressed."
             ),
         },
     }
