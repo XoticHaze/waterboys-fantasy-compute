@@ -146,40 +146,154 @@ def elimination_race(teams: list[dict], survival: dict, *, danger_points: float 
     return rows
 
 
+def _slot_accepts(position: str, slot: str) -> bool:
+    normalized = "RB/WR/TE" if slot == "FLEX" else slot
+    if normalized == position:
+        return True
+    return normalized == "RB/WR/TE" and position in FLEX
+
+
 def _lineup_changes(roster: list[dict], optimized: dict) -> dict:
-    current = {
+    roster_by_id = {player.get("player_id"): player for player in roster}
+    current_starters = {
         player.get("player_id"): str(player.get("lineup_slot") or "")
         for player in roster
         if str(player.get("lineup_slot") or "") in STARTER_SLOTS
     }
-    target = {
-        player.get("player_id"): player.get("assigned_slot")
+    target_rows = {
+        player.get("player_id"): player
         for player in optimized.get("players") or []
     }
-    roster_by_id = {player.get("player_id"): player for player in roster}
+    target_ids = set(target_rows)
+    current_ids = set(current_starters)
+
+    outgoing_ids = [
+        player_id for player_id in current_ids
+        if player_id not in target_ids
+    ]
+    incoming_ids = [
+        player_id for player_id in target_ids
+        if player_id not in current_ids
+    ]
+
+    vacated = [
+        {
+            "player_id": player_id,
+            "slot": current_starters[player_id],
+        }
+        for player_id in outgoing_ids
+    ]
+
+    assignments = {}
+    remaining_slots = list(vacated)
+    for player_id in incoming_ids:
+        player = roster_by_id.get(player_id) or {}
+        position = str(player.get("position") or "")
+        exact_index = next(
+            (
+                index for index, row in enumerate(remaining_slots)
+                if row["slot"] == position
+            ),
+            None,
+        )
+        compatible_index = next(
+            (
+                index for index, row in enumerate(remaining_slots)
+                if _slot_accepts(position, row["slot"])
+            ),
+            None,
+        )
+        index = exact_index if exact_index is not None else compatible_index
+        if index is None:
+            assignments[player_id] = str(
+                (target_rows.get(player_id) or {}).get("assigned_slot") or ""
+            )
+        else:
+            assignments[player_id] = remaining_slots.pop(index)["slot"]
+
     starts = []
     benches = []
-    for player_id, slot in target.items():
-        if player_id not in current:
-            player = roster_by_id.get(player_id) or {}
-            starts.append({
-                "player_id": player_id,
-                "name": player.get("name"),
-                "position": player.get("position"),
-                "to_slot": slot,
-                "projected_points": weekly_projection(player),
-            })
-    for player_id, slot in current.items():
-        if player_id not in target:
-            player = roster_by_id.get(player_id) or {}
-            benches.append({
-                "player_id": player_id,
-                "name": player.get("name"),
-                "position": player.get("position"),
-                "from_slot": slot,
-                "projected_points": weekly_projection(player),
-            })
-    return {"start": starts, "bench": benches}
+    moves = []
+    locked = []
+
+    for player_id in outgoing_ids:
+        player = roster_by_id.get(player_id) or {}
+        from_slot = current_starters[player_id]
+        move = {
+            "player_id": player_id,
+            "name": player.get("name"),
+            "position": player.get("position"),
+            "from_slot": from_slot,
+            "to_slot": "BE",
+            "projected_points": weekly_projection(player),
+        }
+        benches.append(move)
+        moves.append({
+            "player_id": player_id,
+            "from_slot": from_slot,
+            "to_slot": "BE",
+        })
+        if isinstance((player.get("current_week") or {}).get("points"), (int, float)):
+            locked.append(player_id)
+
+    for player_id in incoming_ids:
+        player = roster_by_id.get(player_id) or {}
+        from_slot = str(player.get("lineup_slot") or "BE")
+        to_slot = assignments.get(player_id) or str(
+            (target_rows.get(player_id) or {}).get("assigned_slot") or ""
+        )
+        move = {
+            "player_id": player_id,
+            "name": player.get("name"),
+            "position": player.get("position"),
+            "from_slot": from_slot,
+            "to_slot": to_slot,
+            "projected_points": weekly_projection(player),
+        }
+        starts.append(move)
+        moves.append({
+            "player_id": player_id,
+            "from_slot": from_slot,
+            "to_slot": to_slot,
+        })
+        if isinstance((player.get("current_week") or {}).get("points"), (int, float)):
+            locked.append(player_id)
+
+    return {
+        "start": starts,
+        "bench": benches,
+        "moves": moves,
+        "game_locked_player_ids": sorted(set(locked)),
+        "auto_executable": bool(moves) and not locked,
+    }
+
+
+def command_for_lineup_repair(snapshot: dict) -> dict | None:
+    placement = snapshot.get("placement_engine") or {}
+    optimizer = placement.get("lineup_optimizer") or {}
+    changes = optimizer.get("recommended_changes") or {}
+    moves = changes.get("moves") or []
+    if not moves or changes.get("auto_executable") is not True:
+        return None
+    stamp = str(snapshot.get("collected_at") or "unknown").replace(":", "").replace("-", "").replace(".", "")
+    return {
+        "schema": "waterboys.command.v1",
+        "command_id": f"placement-lineup-{stamp}",
+        "action": "lineup_move",
+        "dry_run": False,
+        "moves": [
+            {
+                "player_id": int(move["player_id"]),
+                "from_slot": str(move["from_slot"]),
+                "to_slot": str(move["to_slot"]),
+            }
+            for move in moves
+        ],
+        "preconditions": {
+            "reason": "automatic weekly placement-engine lineup repair",
+            "projected_lineup_leakage": optimizer.get("projected_lineup_leakage"),
+        },
+    }
 
 
 def _decorate_target(
