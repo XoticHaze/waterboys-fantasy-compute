@@ -594,6 +594,9 @@ class ContractTests(unittest.TestCase):
         self.assertIn("market_reference: row && row.market_reference", worker)
         self.assertIn("bid_guidance: row && row.bid_guidance", worker)
         self.assertIn("diagnostics: snapshot.diagnostics || {}", worker)
+        self.assertIn("placement_engine:", worker)
+        self.assertIn("best_acquisitions:", worker)
+        self.assertIn("elimination_race:", worker)
 
     def test_sniper_prefers_free_material_upgrade_without_faab(self):
         policy = {
