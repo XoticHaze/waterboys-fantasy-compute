@@ -117,63 +117,6 @@ def _release_assets(team: dict | None, limit: int = 8) -> list[dict]:
 
 
 def elimination_race(teams: list[dict], survival: dict, *, danger_points: float = 25.0) -> list[dict]:
-    pending_ids = {row.get("player_id") for row in pending_claim_rows}
-    next_launch_row = next(
-        (
-            row for row in durable_board
-            if row.get("acquisition_path") == "waiver"
-            and row.get("move_class") == "launch"
-            and row.get("player_id") not in pending_ids
-        ),
-        None,
-    )
-    pending_plus_launch = None
-    if next_launch_row:
-        launch_player = player_by_id.get(next_launch_row.get("player_id"))
-        if launch_player:
-            overlay_roster = list(pending_roster)
-            suggested_drop = next_launch_row.get("suggested_drop") or {}
-            drop_id = suggested_drop.get("player_id")
-            if isinstance(drop_id, int):
-                overlay_roster = [
-                    player for player in overlay_roster
-                    if player.get("player_id") != drop_id
-                ]
-            if not any(
-                player.get("player_id") == launch_player.get("player_id")
-                for player in overlay_roster
-            ):
-                overlay_roster.append(launch_player)
-            launch_bid = int((next_launch_row.get("bid_guidance") or {}).get("recommended") or 0)
-            overlay_claims = list(pending_applied) + [{
-                "player_id": launch_player.get("player_id"),
-                "player": launch_player.get("name"),
-                "bid": launch_bid,
-                "drop_player_id": drop_id,
-                "drop_player": suggested_drop.get("name"),
-                "status": "not_submitted_overlay",
-            }]
-            pending_plus_launch = _portfolio_projection(
-                "pending_plus_best_unsubmitted_launch",
-                overlay_roster,
-                overlay_claims,
-                pending_total_bid + launch_bid,
-                waterboys,
-                survival,
-                roster_cfg,
-                base_weekly_risk,
-                current_points,
-            )
-            pending_plus_launch["overlay_target"] = {
-                "player_id": next_launch_row.get("player_id"),
-                "name": next_launch_row.get("name"),
-                "recommended_bid": launch_bid,
-                "injury_status": next_launch_row.get("injury_status"),
-                "durable_risk_adjusted_marginal_ppg": next_launch_row.get(
-                    "durable_risk_adjusted_marginal_ppg"
-                ),
-            }
-
     cutline = survival.get("projected_cutline_points")
     team_by_id = _team_lookup(teams)
     rows = []
@@ -570,6 +513,65 @@ def build_placement_engine(
         ),
         reverse=True,
     )
+
+    pending_ids = {row.get("player_id") for row in pending_claim_rows}
+    next_launch_row = next(
+        (
+            row for row in durable_board
+            if row.get("acquisition_path") == "waiver"
+            and row.get("move_class") == "launch"
+            and row.get("player_id") not in pending_ids
+        ),
+        None,
+    )
+    pending_plus_launch = None
+    if next_launch_row:
+        launch_player = player_by_id.get(next_launch_row.get("player_id"))
+        if launch_player:
+            overlay_roster = list(pending_roster)
+            suggested_drop = next_launch_row.get("suggested_drop") or {}
+            drop_id = suggested_drop.get("player_id")
+            if isinstance(drop_id, int):
+                overlay_roster = [
+                    player for player in overlay_roster
+                    if player.get("player_id") != drop_id
+                ]
+            if not any(
+                player.get("player_id") == launch_player.get("player_id")
+                for player in overlay_roster
+            ):
+                overlay_roster.append(launch_player)
+            launch_bid = int(
+                (next_launch_row.get("bid_guidance") or {}).get("recommended") or 0
+            )
+            overlay_claims = list(pending_applied) + [{
+                "player_id": launch_player.get("player_id"),
+                "player": launch_player.get("name"),
+                "bid": launch_bid,
+                "drop_player_id": drop_id,
+                "drop_player": suggested_drop.get("name"),
+                "status": "not_submitted_overlay",
+            }]
+            pending_plus_launch = _portfolio_projection(
+                "pending_plus_best_unsubmitted_launch",
+                overlay_roster,
+                overlay_claims,
+                pending_total_bid + launch_bid,
+                waterboys,
+                survival,
+                roster_cfg,
+                base_weekly_risk,
+                current_points,
+            )
+            pending_plus_launch["overlay_target"] = {
+                "player_id": next_launch_row.get("player_id"),
+                "name": next_launch_row.get("name"),
+                "recommended_bid": launch_bid,
+                "injury_status": next_launch_row.get("injury_status"),
+                "durable_risk_adjusted_marginal_ppg": next_launch_row.get(
+                    "durable_risk_adjusted_marginal_ppg"
+                ),
+            }
 
     cutline = survival.get("projected_cutline_points")
     margin = (
