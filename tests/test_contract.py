@@ -598,6 +598,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("best_acquisitions:", worker)
         self.assertIn("weekly_rank_up_targets:", worker)
         self.assertIn("durable_rank_up_targets:", worker)
+        self.assertIn("portfolio_scenarios:", worker)
         self.assertIn("elimination_race:", worker)
 
     def test_sniper_prefers_free_material_upgrade_without_faab(self):
