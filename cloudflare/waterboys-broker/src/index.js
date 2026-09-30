@@ -392,6 +392,8 @@ function buildBrief(snapshot, runId, stateCommit) {
       lineup_optimizer: placement.lineup_optimizer,
       elimination_race: placement.elimination_race || [],
       best_acquisitions: (placement.best_acquisitions || []).slice(0, 30),
+      weekly_rank_up_targets: (placement.weekly_rank_up_targets || []).slice(0, 20),
+      durable_rank_up_targets: (placement.durable_rank_up_targets || []).slice(0, 20),
       methodology: placement.methodology,
     },
     recent_activity: (snapshot.activity || []).slice(0, 25),
