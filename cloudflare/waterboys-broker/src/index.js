@@ -298,6 +298,7 @@ function buildBrief(snapshot, runId, stateCommit) {
   const waterboys = snapshot.waterboys || {};
   const market = snapshot.market || {};
   const value = snapshot.value_engine || {};
+  const placement = snapshot.placement_engine || {};
 
   const compactTarget = (row) => ({
     player_id: row && row.player_id,
@@ -382,6 +383,16 @@ function buildBrief(snapshot, runId, stateCommit) {
       elimination_watch_targets: (value.elimination_watch_targets || []).slice(0, 15).map(compactTarget),
       projected_elimination_watch_targets: (value.projected_elimination_watch_targets || []).slice(0, 15).map(compactTarget),
       trade_targets: (value.trade_targets || []).slice(0, 25).map(compactTarget),
+    },
+    placement_engine: {
+      schema: placement.schema,
+      status: placement.status,
+      survival_pressure: placement.survival_pressure,
+      current: placement.current,
+      lineup_optimizer: placement.lineup_optimizer,
+      elimination_race: placement.elimination_race || [],
+      best_acquisitions: (placement.best_acquisitions || []).slice(0, 30),
+      methodology: placement.methodology,
     },
     recent_activity: (snapshot.activity || []).slice(0, 25),
     capabilities: snapshot.capabilities || {},
