@@ -135,5 +135,19 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add rendezvous/receipts/waterboys-deploy-r2.json
-          git commit -m 'deploy: publish WaterBoys R2 receipt' || true
-          git push
+          if git diff --cached --quiet; then
+            echo 'WATERBOYS_DEPLOY_RECEIPT_UNCHANGED=1'
+          else
+            git commit -m 'deploy: publish WaterBoys R2 receipt'
+            for attempt in 1 2 3; do
+              if git push; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo 'WaterBoys deploy receipt push failed after retry' >&2
+                exit 1
+              fi
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
