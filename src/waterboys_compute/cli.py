@@ -6,6 +6,7 @@ import json
 from .broker import Broker
 from .collector import collect_player_history, collect_snapshot
 from .command import execute_guarded
+from .placement import command_for_lineup_repair
 from .sniper import command_for_cancel, command_for_selection, plan_sniper
 
 
@@ -45,6 +46,33 @@ def main() -> int:
     snapshot = collect_snapshot(runtime)
     policy = runtime.get("sniper") or {}
     previous = runtime.get("sniper_state")
+    live = policy.get("enabled") is True and str(policy.get("mode") or "").lower() == "live"
+    executions = []
+    lineup_repair_count = 0
+
+    if live:
+        lineup_command = command_for_lineup_repair(snapshot)
+        if lineup_command:
+            try:
+                receipt = execute_guarded(
+                    runtime,
+                    {"status": "pending", "command": lineup_command},
+                )
+                broker_result = broker.publish_receipt(receipt)
+                executions.append({"receipt": receipt, "broker_result": broker_result})
+                lineup_repair_count = 1
+                if receipt.get("status") == "verified":
+                    snapshot = collect_snapshot(runtime)
+            except Exception as exc:
+                executions.append({
+                    "receipt": {
+                        "command_id": lineup_command.get("command_id"),
+                        "status": "placement_lineup_error",
+                        "mutation_attempted": False,
+                        "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                    },
+                    "broker_result": None,
+                })
 
     history_error = None
     try:
@@ -86,9 +114,7 @@ def main() -> int:
     snapshot_result = broker.publish_snapshot(snapshot)
     report = plan_sniper(snapshot, policy, previous)
     report["history_hydration_error"] = history_error
-    executions = []
 
-    live = policy.get("enabled") is True and str(policy.get("mode") or "").lower() == "live"
     if live:
         for cancel in report.get("cancel_actions") or []:
             try:
@@ -138,6 +164,7 @@ def main() -> int:
         "selected_count": len(report.get("selected") or []),
         "cancel_count": len(report.get("cancel_actions") or []),
         "execution_count": len(executions),
+        "lineup_repair_count": lineup_repair_count,
         "snapshot_result": snapshot_result,
         "report_result": report_result,
     }, sort_keys=True))
