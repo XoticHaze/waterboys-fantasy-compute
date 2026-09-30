@@ -169,6 +169,8 @@ class PlacementEngineTests(unittest.TestCase):
         self.assertEqual(target["name"], "Star RB")
         self.assertEqual(target["move_class"], "launch")
         self.assertGreaterEqual(target["estimated_rank_gain"], 1)
+        self.assertIn("portfolio_scenarios", engine)
+        self.assertIn("pending_claims", engine["portfolio_scenarios"])
 
 
 if __name__ == "__main__":
