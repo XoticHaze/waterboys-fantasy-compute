@@ -709,6 +709,89 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(action["replacement_bid"], 98)
         self.assertEqual(action["replacement_selection"]["selected_bid"], 98)
 
+    def test_sniper_blocks_paid_middle_move_but_keeps_cheap_value(self):
+        policy = {
+            "global_max_bid": 400,
+            "green_reserve_faab": 150,
+            "yellow_reserve_faab": 75,
+            "red_reserve_faab": 0,
+            "survival_bands": {"green_margin": 25, "yellow_margin": 12},
+            "growth_discipline": {
+                "enabled": True,
+                "cheap_value_max_bid": 25,
+                "block_paid_move_without_placement_evidence": True,
+            },
+            "tiers": [
+                {"name": "cheap", "max_bid": 25, "min_risk_adjusted_marginal_ppg": 1.5, "min_expected_added_points_remaining": 15},
+                {"name": "premium", "max_bid": 250, "min_risk_adjusted_marginal_ppg": 5.0, "min_expected_added_points_remaining": 50},
+            ],
+            "priority_caps": {},
+            "trap_guards": {
+                "injury": {"block_statuses": ["OUT", "INJURY_RESERVE", "DOUBTFUL"]},
+                "recent_form": {"min_games_for_large_bid": 2, "max_single_game_share_of_recent_points": 0.60},
+                "valuation": {"large_bid_threshold": 100, "max_projection_drop_pct_since_first_seen": 20},
+            },
+        }
+        base_snapshot = {
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 988,
+                "roster": [{"player_id": 10, "name": "Drop", "current_week": {"points": None}}],
+            },
+            "league": {"roster": {"size": 14}},
+            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "placement_engine": {
+                "survival_pressure": "green",
+                "best_acquisitions": [
+                    {
+                        "player_id": 20,
+                        "acquisition_path": "waiver",
+                        "move_class": "material",
+                        "estimated_rank_gain": 1,
+                    },
+                    {
+                        "player_id": 21,
+                        "acquisition_path": "waiver",
+                        "move_class": "maintenance",
+                        "estimated_rank_gain": 0,
+                    },
+                ],
+            },
+        }
+        paid_middle = {
+            "player_id": 20,
+            "name": "Middle Upgrade",
+            "position": "WR",
+            "inputs": {
+                "availability_status": "WAIVERS",
+                "injury_status": "ACTIVE",
+                "projected_avg_points": 23.0,
+                "avg_points": 20.0,
+                "percent_started": 50.0,
+                "recent_form": {"games_count": 3, "median": 20.0, "max_single_game_share": 0.40},
+            },
+            "value": {"risk_adjusted_marginal_ppg": 5.1, "expected_added_points_remaining": 65.0},
+            "suggested_drop": {"player_id": 10, "name": "Drop", "projected_avg_points": 14.0},
+            "bid_guidance": {"recommended": 98, "reservation_ceiling": 98},
+            "market_reference": {"confidence": "medium"},
+        }
+        blocked = evaluate_candidate(paid_middle, base_snapshot, policy)
+        self.assertFalse(blocked["eligible"])
+        self.assertIn("paid_middle_move_blocked", blocked["reasons"])
+        self.assertEqual(blocked["placement_move_class"], "material")
+
+        cheap = dict(paid_middle)
+        cheap["player_id"] = 21
+        cheap["name"] = "Cheap Edge"
+        cheap["value"] = {
+            "risk_adjusted_marginal_ppg": 2.0,
+            "expected_added_points_remaining": 25.0,
+        }
+        cheap["bid_guidance"] = {"recommended": 6, "reservation_ceiling": 25}
+        allowed = evaluate_candidate(cheap, base_snapshot, policy)
+        self.assertTrue(allowed["eligible"])
+        self.assertEqual(allowed["selected_bid"], 6)
+
     def test_sniper_blocks_large_questionable_or_outlier_bid(self):
         policy = {
             "global_max_bid": 400,
