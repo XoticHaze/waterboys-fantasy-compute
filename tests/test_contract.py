@@ -652,6 +652,63 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["action"], "free_agent_add")
         self.assertEqual(result["selected_bid"], 0)
 
+    def test_sniper_reprices_any_pending_bid_above_current_cap(self):
+        policy = {
+            "global_max_bid": 400,
+            "green_reserve_faab": 150,
+            "yellow_reserve_faab": 75,
+            "red_reserve_faab": 0,
+            "survival_bands": {"green_margin": 25, "yellow_margin": 12},
+            "tiers": [
+                {"name": "premium", "max_bid": 250, "min_risk_adjusted_marginal_ppg": 5, "min_expected_added_points_remaining": 50},
+            ],
+            "priority_caps": {},
+            "trap_guards": {
+                "injury": {"block_statuses": ["OUT", "INJURY_RESERVE", "DOUBTFUL"]},
+                "recent_form": {"min_games_for_large_bid": 2, "max_single_game_share_of_recent_points": 0.60},
+                "valuation": {"large_bid_threshold": 100, "max_projection_drop_pct_since_first_seen": 20},
+            },
+        }
+        snapshot = {
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 988,
+                "roster": [{"player_id": 10, "name": "Drop", "current_week": {"points": None}}],
+            },
+            "league": {"roster": {"size": 14}},
+            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "waiver_offers": [{
+                "offer_id": "claim-1",
+                "team_id": 18,
+                "player_id": 20,
+                "player": "Target",
+                "result": "PENDING",
+                "bid": 112,
+            }],
+            "value_engine": {"waiver_targets": [{
+                "player_id": 20,
+                "name": "Target",
+                "position": "WR",
+                "inputs": {
+                    "availability_status": "WAIVERS",
+                    "injury_status": "ACTIVE",
+                    "projected_avg_points": 23.0,
+                    "avg_points": 20.0,
+                    "percent_started": 50.0,
+                    "recent_form": {"games_count": 3, "median": 20.0, "max_single_game_share": 0.40},
+                },
+                "value": {"risk_adjusted_marginal_ppg": 5.0, "expected_added_points_remaining": 65.0},
+                "suggested_drop": {"player_id": 10, "name": "Drop", "projected_avg_points": 14.0},
+                "bid_guidance": {"recommended": 98, "reservation_ceiling": 98},
+                "market_reference": {"confidence": "medium"},
+            }]},
+        }
+        report = plan_sniper(snapshot, policy)
+        self.assertEqual(len(report["cancel_actions"]), 1)
+        action = report["cancel_actions"][0]
+        self.assertEqual(action["replacement_bid"], 98)
+        self.assertEqual(action["replacement_selection"]["selected_bid"], 98)
+
     def test_sniper_blocks_large_questionable_or_outlier_bid(self):
         policy = {
             "global_max_bid": 400,
