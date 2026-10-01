@@ -122,6 +122,18 @@ def main() -> int:
                 receipt = execute_guarded(runtime, {"status": "pending", "command": command})
                 broker_result = broker.publish_receipt(receipt)
                 executions.append({"receipt": receipt, "broker_result": broker_result})
+                replacement = cancel.get("replacement_selection")
+                if receipt.get("status") == "verified" and isinstance(replacement, dict):
+                    replacement_command = command_for_selection(replacement, snapshot)
+                    replacement_receipt = execute_guarded(
+                        runtime,
+                        {"status": "pending", "command": replacement_command},
+                    )
+                    replacement_result = broker.publish_receipt(replacement_receipt)
+                    executions.append({
+                        "receipt": replacement_receipt,
+                        "broker_result": replacement_result,
+                    })
             except Exception as exc:
                 executions.append({
                     "receipt": {
