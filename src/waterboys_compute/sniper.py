@@ -218,14 +218,17 @@ def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = Non
             continue
         current_bid = int(pending_row.get("bid") or 0)
         repriced = int(candidate.get("selected_bid") or 0)
-        if repriced > 0 and current_bid > repriced and current_bid - repriced >= max(5, int(current_bid * 0.20)):
+        if repriced > 0 and current_bid > repriced:
+            replacement = dict(candidate)
+            replacement["selected_bid"] = repriced
             cancel_actions.append({
                 "action": "waiver_cancel",
                 "transaction_id": pending_row.get("offer_id"),
                 "player_id": pending_row.get("player_id"),
                 "player": pending_row.get("player"),
-                "reason": f"current bid {current_bid} materially exceeds repriced bid {repriced}",
+                "reason": f"current bid {current_bid} exceeds repriced bid {repriced}",
                 "replacement_bid": repriced,
+                "replacement_selection": replacement,
             })
 
     eligible = [
