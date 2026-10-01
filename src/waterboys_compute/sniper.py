@@ -52,6 +52,56 @@ def _confidence_signals(row: dict) -> dict:
     }
 
 
+def _placement_row(snapshot: dict, player_id: int | None) -> dict | None:
+    if not isinstance(player_id, int):
+        return None
+    placement = snapshot.get("placement_engine") or {}
+    boards = [
+        placement.get("best_acquisitions") or [],
+        placement.get("weekly_rank_up_targets") or [],
+        placement.get("durable_rank_up_targets") or [],
+    ]
+    for board in boards:
+        for row in board:
+            if (
+                row.get("player_id") == player_id
+                and row.get("acquisition_path") == "waiver"
+            ):
+                return row
+    return None
+
+
+def _growth_discipline_reason(
+    snapshot: dict,
+    policy: dict,
+    player_id: int | None,
+    bid: int,
+) -> str | None:
+    cfg = policy.get("growth_discipline") or {}
+    if cfg.get("enabled") is not True:
+        return None
+    cheap_max = int(cfg.get("cheap_value_max_bid") or 25)
+    if bid <= cheap_max:
+        return None
+
+    placement = snapshot.get("placement_engine") or {}
+    pressure = str(placement.get("survival_pressure") or "").lower()
+    placement_row = _placement_row(snapshot, player_id)
+    if placement_row is None:
+        if cfg.get("block_paid_move_without_placement_evidence") is True:
+            return "paid_move_missing_placement_evidence"
+        return None
+
+    move_class = str(placement_row.get("move_class") or "").lower()
+    if pressure == "red":
+        allowed = {"material", "launch"}
+    else:
+        allowed = {"launch"}
+    if move_class not in allowed:
+        return "paid_middle_move_blocked"
+    return None
+
+
 def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report: dict | None = None) -> dict:
     inputs = row.get("inputs") or {}
     value = row.get("value") or {}
@@ -160,6 +210,14 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
         market_conf = str((row.get("market_reference") or {}).get("confidence") or "")
         if bid >= large_threshold and market_conf == "low" and not priority:
             reasons.append("large_bid_low_market_confidence")
+        discipline_reason = _growth_discipline_reason(
+            snapshot,
+            policy,
+            row.get("player_id"),
+            bid,
+        )
+        if discipline_reason:
+            reasons.append(discipline_reason)
 
     return {
         "player_id": row.get("player_id"),
@@ -180,6 +238,8 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
         "recommended_bid": recommended,
         "hard_cap": hard_cap,
         "selected_bid": bid,
+        "placement_move_class": ((_placement_row(snapshot, row.get("player_id")) or {}).get("move_class")),
+        "estimated_rank_gain": ((_placement_row(snapshot, row.get("player_id")) or {}).get("estimated_rank_gain")),
         "eligible": not reasons,
         "reasons": reasons,
     }
