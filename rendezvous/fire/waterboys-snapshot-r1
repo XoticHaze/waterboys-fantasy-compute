@@ -1,6 +1,3 @@
-{
-  "schema": "waterboys.fire.v1",
-  "action": "snapshot",
-  "nonce": "2026-10-04-sunday-live-check-1732-cdt",
-  "reason": "Fresh Sunday live-state check for actionable WaterBoys moves and elimination race"
-}
+waterboys-snapshot-r1
+nonce=20261006T1802Z-chatcheck
+reason=today-management-check
