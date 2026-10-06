@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute-command",
-  "nonce": "2026-10-06-protect-monangai-cancel-swift-1305-cdt",
-  "reason": "Cancel stale Swift claim that conditionally drops Kyle Monangai"
+  "nonce": "2026-10-06-protect-monangai-cancel-pollard-1308-cdt",
+  "reason": "Cancel stale Pollard claim that conditionally drops Kyle Monangai"
 }
