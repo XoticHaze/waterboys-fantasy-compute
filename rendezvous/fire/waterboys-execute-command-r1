@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute-command",
-  "nonce": "2026-09-30-shaheed-opportunity-cost-cancel-2248-cdt",
-  "reason": "Cancel Shaheed claim to preserve FAAB for higher-leverage launch targets"
+  "nonce": "2026-10-06-protect-monangai-cancel-swift-1305-cdt",
+  "reason": "Cancel stale Swift claim that conditionally drops Kyle Monangai"
 }
