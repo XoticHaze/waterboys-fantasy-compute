@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "snapshot",
-  "nonce": "2026-10-08-week5-schedule-current-attention-2232-cdt",
-  "reason": "Fresh Week 5 schedule, injury, waiver, elimination, and roster attention check"
+  "nonce": "2026-10-09-post-waiver-reconciliation-0019-cdt",
+  "reason": "Post-merge verification for waiver reconciliation and roster-slot safety"
 }
