@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "sniper",
-  "nonce": "2026-10-04-sunday-live-check-1733-cdt",
-  "reason": "Fresh Sunday live-state sniper pass after WaterBoys moved to current-week rank 1"
+  "nonce": "2026-10-09-post-waiver-safety-0020-cdt",
+  "reason": "Post-merge live verification: no stale waiver cancels and no IR casualty selection"
 }
