@@ -56,6 +56,62 @@ def collect_player_history(
     return result
 
 
+def _is_terminal_waiver_event(row: dict) -> bool:
+    execution_type = str(row.get("execution_type") or "").upper()
+    result = str(row.get("result") or "").upper()
+    return (
+        execution_type in {"CANCEL", "PROCESS"}
+        or any(marker in result for marker in ("CANCEL", "EXECUTED", "FAILED", "OUTBID"))
+    )
+
+
+def _reconcile_waiver_offer_rows(rows: list[dict]) -> list[dict]:
+    """Collapse ESPN lifecycle events onto the original waiver offer.
+
+    ESPN keeps the original EXECUTE row marked PENDING after a later PROCESS or
+    CANCEL event. Consumers need one terminal row per offer, not both the stale
+    proposal and its resolution event.
+    """
+    offer_ids = {
+        str(row.get("offer_id") or "")
+        for row in rows
+        if row.get("offer_id")
+    }
+    resolution_by_offer: dict[str, dict] = {}
+    for row in rows:
+        related = str(row.get("related_offer_id") or "")
+        if not related or related not in offer_ids or not _is_terminal_waiver_event(row):
+            continue
+        current = resolution_by_offer.get(related)
+        if current is None or int(row.get("date") or 0) >= int(current.get("date") or 0):
+            resolution_by_offer[related] = row
+
+    if not resolution_by_offer:
+        return rows
+
+    collapsed = []
+    for row in rows:
+        related = str(row.get("related_offer_id") or "")
+        if related in resolution_by_offer and _is_terminal_waiver_event(row):
+            continue
+
+        resolution = resolution_by_offer.get(str(row.get("offer_id") or ""))
+        if resolution:
+            row = dict(row)
+            execution_type = str(resolution.get("execution_type") or "").upper()
+            resolution_result = str(resolution.get("result") or "")
+            row["result"] = (
+                "CANCELED"
+                if execution_type == "CANCEL" or "CANCEL" in resolution_result.upper()
+                else resolution_result or "PROCESSED"
+            )
+            row["resolution_offer_id"] = resolution.get("offer_id")
+            row["resolution_execution_type"] = resolution.get("execution_type")
+            row["resolution_date"] = resolution.get("date")
+        collapsed.append(row)
+    return collapsed
+
+
 def collect_waiver_offers(
     league: League,
     current_week: int | None,
@@ -128,32 +184,7 @@ def collect_waiver_offers(
                 "bid": transaction.get("bidAmount"),
             })
 
-    canceled_offer_ids = {
-        str(row.get("related_offer_id"))
-        for row in rows
-        if row.get("related_offer_id")
-        and (
-            str(row.get("execution_type") or "").upper() == "CANCEL"
-            or "CANCEL" in str(row.get("result") or "").upper()
-        )
-    }
-    if canceled_offer_ids:
-        collapsed = []
-        for row in rows:
-            is_cancel_event = (
-                row.get("related_offer_id") in canceled_offer_ids
-                and (
-                    str(row.get("execution_type") or "").upper() == "CANCEL"
-                    or "CANCEL" in str(row.get("result") or "").upper()
-                )
-            )
-            if is_cancel_event:
-                continue
-            if row.get("offer_id") in canceled_offer_ids:
-                row = dict(row)
-                row["result"] = "CANCELED"
-            collapsed.append(row)
-        rows = collapsed
+    rows = _reconcile_waiver_offer_rows(rows)
 
     rows.sort(
         key=lambda row: (

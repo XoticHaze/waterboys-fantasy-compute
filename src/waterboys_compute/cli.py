@@ -162,6 +162,16 @@ def main() -> int:
                     "broker_result": None,
                 })
 
+    verified_mutation = any(
+        item["receipt"].get("status") == "verified"
+        and item["receipt"].get("mutation_attempted") is True
+        for item in executions
+    )
+    if live and verified_mutation:
+        snapshot = collect_snapshot(runtime)
+        snapshot_result = broker.publish_snapshot(snapshot)
+        report["post_action_snapshot_collected_at"] = snapshot.get("collected_at")
+
     report["executions"] = [
         {
             "command_id": item["receipt"].get("command_id"),
