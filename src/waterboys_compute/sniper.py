@@ -124,15 +124,25 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     drop = row.get("suggested_drop")
     roster = list((snapshot.get("waterboys") or {}).get("roster") or [])
     roster_by_id = {p.get("player_id"): p for p in roster}
+    roster_size = int((((snapshot.get("league") or {}).get("roster") or {}).get("size") or 14))
+    active_roster_count = sum(
+        1 for player in roster
+        if str(player.get("lineup_slot") or "").upper() != "IR"
+    )
     if drop:
         drop_live = roster_by_id.get(drop.get("player_id")) or {}
         drop_projection = num(drop.get("projected_avg_points"))
+        if (
+            active_roster_count >= roster_size
+            and str(drop_live.get("lineup_slot") or "").upper() == "IR"
+        ):
+            reasons.append("suggested_drop_does_not_free_active_slot")
         if projection <= drop_projection:
             reasons.append("candidate_not_better_than_drop_asset")
         current_points = ((drop_live.get("current_week") or {}).get("points"))
         if isinstance(current_points, (int, float)):
             reasons.append("suggested_drop_may_be_game_locked")
-    elif len(roster) >= int((((snapshot.get("league") or {}).get("roster") or {}).get("size") or 14)):
+    elif active_roster_count >= roster_size:
         reasons.append("full_roster_without_safe_drop")
 
     prior = _prior_observation(row, previous_report)
@@ -370,9 +380,11 @@ def command_for_selection(selection: dict, snapshot: dict) -> dict:
 
 def command_for_cancel(cancel: dict, snapshot: dict) -> dict:
     stamp = str(snapshot.get("collected_at") or "unknown").replace(":", "").replace("-", "").replace(".", "")
+    transaction_id = str(cancel.get("transaction_id") or "")
+    transaction_suffix = transaction_id.replace("-", "")[:10] or "unknown"
     return {
         "schema": "waterboys.command.v1",
-        "command_id": f"sniper-cancel-{stamp}-{cancel.get('player_id')}",
+        "command_id": f"sniper-cancel-{stamp}-{cancel.get('player_id')}-{transaction_suffix}",
         "action": "waiver_cancel",
         "dry_run": False,
         "transaction_id": str(cancel.get("transaction_id") or ""),
