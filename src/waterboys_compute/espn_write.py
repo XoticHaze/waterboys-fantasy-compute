@@ -189,6 +189,21 @@ def validate_preflight(command: dict, fresh: dict) -> None:
         if drop_id is not None and drop_id not in roster_ids:
             raise RuntimeError("drop player is not on the fresh WaterBoys roster")
 
+        roster_size = int((((fresh.get("league") or {}).get("roster") or {}).get("size") or 0))
+        active_roster = [
+            player for player in roster
+            if str(player.get("lineup_slot") or "").upper() != "IR"
+        ]
+        if roster_size > 0 and len(active_roster) >= roster_size:
+            if drop_id is None:
+                raise RuntimeError("active WaterBoys roster is full and add has no active-roster drop")
+            drop_player = next(
+                (player for player in roster if player.get("player_id") == drop_id),
+                {},
+            )
+            if str(drop_player.get("lineup_slot") or "").upper() == "IR":
+                raise RuntimeError("IR drop does not free the active roster slot required for add")
+
     if action == "free_agent_drop":
         player_id = command.get("player_id")
         if player_id not in roster_ids:
