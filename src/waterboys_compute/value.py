@@ -96,6 +96,8 @@ def suggest_drop(roster: list[dict], candidate: dict, lineup_ids: set, roster_cf
 
     choices = []
     for player in roster:
+        if str(player.get("lineup_slot") or "").upper() == "IR":
+            continue
         if player.get("player_id") in lineup_ids:
             continue
         if forced_position and str(player.get("position") or "") != forced_position:
