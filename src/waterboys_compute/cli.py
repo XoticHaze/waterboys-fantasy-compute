@@ -167,8 +167,43 @@ def main() -> int:
         and item["receipt"].get("mutation_attempted") is True
         for item in executions
     )
+    verified_roster_add = any(
+        item["receipt"].get("status") == "verified"
+        and item["receipt"].get("mutation_attempted") is True
+        and item["receipt"].get("action") in {"free_agent_add", "waiver_claim"}
+        for item in executions
+    )
     if live and verified_mutation:
         snapshot = collect_snapshot(runtime)
+
+        if verified_roster_add:
+            followup_lineup = command_for_lineup_repair(snapshot)
+            if followup_lineup:
+                try:
+                    followup_receipt = execute_guarded(
+                        runtime,
+                        {"status": "pending", "command": followup_lineup},
+                    )
+                    followup_result = broker.publish_receipt(followup_receipt)
+                    executions.append({
+                        "receipt": followup_receipt,
+                        "broker_result": followup_result,
+                    })
+                    lineup_repair_count += 1
+                    if followup_receipt.get("status") == "verified":
+                        snapshot = collect_snapshot(runtime)
+                except Exception as exc:
+                    executions.append({
+                        "receipt": {
+                            "command_id": followup_lineup.get("command_id"),
+                            "action": "lineup_move",
+                            "status": "post_acquisition_lineup_error",
+                            "mutation_attempted": False,
+                            "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                        },
+                        "broker_result": None,
+                    })
+
         snapshot_result = broker.publish_snapshot(snapshot)
         report["post_action_snapshot_collected_at"] = snapshot.get("collected_at")
 
