@@ -18,6 +18,16 @@ SLOT_IDS = {
     "RB/WR/TE": 23,
     "FLEX": 23,
 }
+STARTER_LINEUP_SLOTS = {"QB", "RB", "WR", "TE", "D/ST", "DST", "K", "RB/WR/TE", "FLEX"}
+BLOCKED_START_STATUSES = {
+    "OUT",
+    "INJURY_RESERVE",
+    "DOUBTFUL",
+    "SUSPENDED",
+    "SUSPENSION",
+    "PUP",
+    "COMMISSIONER_EXEMPT",
+}
 
 READ_HOST = "https://lm-api-reads.fantasy.espn.com"
 WRITE_HOST = "https://lm-api-writes.fantasy.espn.com"
@@ -217,9 +227,26 @@ def validate_preflight(command: dict, fresh: dict) -> None:
 
     if action in {"lineup_move", "ir_move"}:
         moves = command.get("moves") if isinstance(command.get("moves"), list) else [command]
+        roster_by_id = {player.get("player_id"): player for player in roster}
         for move in moves:
-            if move.get("player_id") not in roster_ids:
+            player_id = move.get("player_id")
+            if player_id not in roster_ids:
                 raise RuntimeError("lineup player is not on the fresh WaterBoys roster")
+            if action != "lineup_move":
+                continue
+
+            to_slot = str(move.get("to_slot") or "").upper()
+            player = roster_by_id.get(player_id) or {}
+            if to_slot in STARTER_LINEUP_SLOTS:
+                injury = str(player.get("injury_status") or "").upper()
+                if injury in BLOCKED_START_STATUSES:
+                    raise RuntimeError(
+                        f"cannot start {injury or 'nonstartable'} player in lineup_move"
+                    )
+                if str(player.get("lineup_slot") or "").upper() == "IR":
+                    raise RuntimeError(
+                        "IR-slot player requires explicit activation before a starter move"
+                    )
 
 
 def verify_pending_claim(runtime: dict, command: dict) -> dict:

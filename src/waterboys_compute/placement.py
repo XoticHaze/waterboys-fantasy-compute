@@ -6,6 +6,34 @@ from .value import FLEX, availability, num, optimize as optimize_durable, score_
 
 
 STARTER_SLOTS = {"QB", "RB", "WR", "TE", "RB/WR/TE", "FLEX", "D/ST", "K"}
+BLOCKED_START_STATUSES = {
+    "OUT",
+    "INJURY_RESERVE",
+    "DOUBTFUL",
+    "SUSPENDED",
+    "SUSPENSION",
+    "PUP",
+    "COMMISSIONER_EXEMPT",
+}
+
+
+def _lineup_slot(player: dict) -> str:
+    return str(player.get("lineup_slot") or "").upper()
+
+
+def _injury_status(player: dict) -> str:
+    return str(player.get("injury_status") or "").upper()
+
+
+def _game_locked(player: dict) -> bool:
+    return isinstance((player.get("current_week") or {}).get("points"), (int, float))
+
+
+def starter_eligible(player: dict) -> bool:
+    return (
+        _lineup_slot(player) != "IR"
+        and _injury_status(player) not in BLOCKED_START_STATUSES
+    )
 
 
 def weekly_projection(player: dict) -> float:
@@ -22,24 +50,121 @@ def optimize_weekly(players: list[dict], roster_cfg: dict, *, risk_adjusted: boo
     by_pos: dict[str, list[dict]] = {}
     for player in players:
         by_pos.setdefault(str(player.get("position") or ""), []).append(player)
-    for pool in by_pos.values():
-        pool.sort(key=score, reverse=True)
 
     picked: list[tuple[dict, str]] = []
     ids: set[Any] = set()
-    for pos in ("QB", "RB", "WR", "TE", "D/ST", "K"):
-        for player in by_pos.get(pos, [])[: counts.get(pos, 0)]:
-            picked.append((player, pos))
-            ids.add(player.get("player_id"))
+    starter_holes: list[dict] = []
 
-    flex = [
-        player for player in players
-        if player.get("position") in FLEX and player.get("player_id") not in ids
-    ]
-    flex.sort(key=score, reverse=True)
-    for player in flex[: counts.get("FLEX", 0)]:
-        picked.append((player, "RB/WR/TE"))
+    def record_hole(player: dict | None, slot: str, reason: str) -> None:
+        starter_holes.append({
+            "player_id": player.get("player_id") if player else None,
+            "name": player.get("name") if player else None,
+            "position": player.get("position") if player else (
+                "D/ST" if slot == "D/ST" else slot
+            ),
+            "slot": slot,
+            "injury_status": player.get("injury_status") if player else None,
+            "projected_points": weekly_projection(player or {}),
+            "game_locked": _game_locked(player or {}),
+            "reason": reason,
+        })
+
+    def add(player: dict, slot: str) -> None:
+        picked.append((player, slot))
         ids.add(player.get("player_id"))
+
+    def fill_position(pos: str) -> None:
+        need = int(counts.get(pos, 0))
+        if need <= 0:
+            return
+
+        pool = list(by_pos.get(pos, []))
+        current_locked = [
+            player for player in pool
+            if _lineup_slot(player) == pos and _game_locked(player)
+        ]
+        for player in current_locked[:need]:
+            if player.get("player_id") in ids:
+                continue
+            add(player, pos)
+            if not starter_eligible(player):
+                record_hole(player, pos, "locked_nonstartable_starter")
+
+        remaining = need - sum(1 for _, slot in picked if slot == pos)
+        if remaining > 0:
+            eligible = [
+                player for player in pool
+                if player.get("player_id") not in ids and starter_eligible(player)
+            ]
+            eligible.sort(key=score, reverse=True)
+            for player in eligible[:remaining]:
+                add(player, pos)
+
+        remaining = need - sum(1 for _, slot in picked if slot == pos)
+        if remaining > 0:
+            current_fallback = [
+                player for player in pool
+                if player.get("player_id") not in ids
+                and _lineup_slot(player) == pos
+            ]
+            current_fallback.sort(key=score, reverse=True)
+            for player in current_fallback[:remaining]:
+                add(player, pos)
+                record_hole(player, pos, "nonstartable_starter_no_healthy_replacement")
+
+        remaining = need - sum(1 for _, slot in picked if slot == pos)
+        for _ in range(max(0, remaining)):
+            record_hole(None, pos, "unfilled_starter_slot")
+
+    for pos in ("QB", "RB", "WR", "TE", "D/ST", "K"):
+        fill_position(pos)
+
+    flex_need = int(counts.get("FLEX", 0))
+    flex_slots = {"RB/WR/TE", "FLEX"}
+    current_locked_flex = [
+        player for player in players
+        if player.get("position") in FLEX
+        and player.get("player_id") not in ids
+        and _lineup_slot(player) in flex_slots
+        and _game_locked(player)
+    ]
+    for player in current_locked_flex[:flex_need]:
+        add(player, "RB/WR/TE")
+        if not starter_eligible(player):
+            record_hole(player, "RB/WR/TE", "locked_nonstartable_starter")
+
+    flex_remaining = flex_need - sum(1 for _, slot in picked if slot == "RB/WR/TE")
+    if flex_remaining > 0:
+        flex = [
+            player for player in players
+            if player.get("position") in FLEX
+            and player.get("player_id") not in ids
+            and starter_eligible(player)
+        ]
+        flex.sort(key=score, reverse=True)
+        for player in flex[:flex_remaining]:
+            add(player, "RB/WR/TE")
+
+    flex_remaining = flex_need - sum(1 for _, slot in picked if slot == "RB/WR/TE")
+    if flex_remaining > 0:
+        current_fallback = [
+            player for player in players
+            if player.get("position") in FLEX
+            and player.get("player_id") not in ids
+            and _lineup_slot(player) in flex_slots
+        ]
+        current_fallback.sort(key=score, reverse=True)
+        for player in current_fallback[:flex_remaining]:
+            add(player, "RB/WR/TE")
+            record_hole(
+                player,
+                "RB/WR/TE",
+                "nonstartable_starter_no_healthy_replacement",
+            )
+
+    flex_remaining = flex_need - sum(1 for _, slot in picked if slot == "RB/WR/TE")
+    for _ in range(max(0, flex_remaining)):
+        record_hole(None, "RB/WR/TE", "unfilled_starter_slot")
 
     raw = sum(weekly_projection(player) for player, _ in picked)
     risk = sum(weekly_projection(player) * availability(player) for player, _ in picked)
@@ -47,6 +172,7 @@ def optimize_weekly(players: list[dict], roster_cfg: dict, *, risk_adjusted: boo
         "projected_points": round(raw, 4),
         "risk_adjusted_projected_points": round(risk, 4),
         "ids": ids,
+        "starter_holes": starter_holes,
         "players": [
             {
                 "player_id": player.get("player_id"),
@@ -54,6 +180,8 @@ def optimize_weekly(players: list[dict], roster_cfg: dict, *, risk_adjusted: boo
                 "position": player.get("position"),
                 "assigned_slot": slot,
                 "injury_status": player.get("injury_status"),
+                "starter_eligible": starter_eligible(player),
+                "game_locked": _game_locked(player),
                 "projected_points": weekly_projection(player),
                 "risk_adjusted_projected_points": round(
                     weekly_projection(player) * availability(player), 4
@@ -62,7 +190,6 @@ def optimize_weekly(players: list[dict], roster_cfg: dict, *, risk_adjusted: boo
             for player, slot in picked
         ],
     }
-
 
 def projected_rank(points: float, survival: dict, waterboys_team_id: int | None) -> int | None:
     rows = list(survival.get("current_week_ranking") or [])
@@ -731,6 +858,7 @@ def build_placement_engine(
                 num(base_weekly.get("projected_points")) - current_points, 4
             ),
             "recommended_changes": _lineup_changes(roster, base_weekly),
+            "starter_holes": base_weekly.get("starter_holes") or [],
             "optimized_lineup": base_weekly.get("players"),
         },
         "elimination_race": race,
