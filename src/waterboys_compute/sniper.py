@@ -71,6 +71,63 @@ def _placement_row(snapshot: dict, player_id: int | None) -> dict | None:
     return None
 
 
+def _hole_accepts_position(hole: dict, position: str) -> bool:
+    slot = str(hole.get("slot") or "")
+    hole_position = str(hole.get("position") or "")
+    if slot in {"RB/WR/TE", "FLEX"}:
+        return position in {"RB", "WR", "TE"}
+    return position == hole_position or position == slot
+
+
+def _emergency_repair_context(
+    row: dict,
+    snapshot: dict,
+    policy: dict,
+) -> dict | None:
+    cfg = policy.get("emergency_lineup_repair") or {}
+    if cfg.get("enabled") is not True:
+        return None
+
+    inputs = row.get("inputs") or {}
+    availability = str(inputs.get("availability_status") or "").upper()
+    injury = str(inputs.get("injury_status") or "").upper()
+    blocked = set(
+        (policy.get("trap_guards") or {}).get("injury", {}).get("block_statuses")
+        or BLOCKED_INJURY
+    )
+    if availability != "FREEAGENT" or injury in blocked:
+        return None
+
+    holes = list(
+        ((snapshot.get("placement_engine") or {}).get("lineup_optimizer") or {}).get(
+            "starter_holes"
+        )
+        or []
+    )
+    candidate_position = str(row.get("position") or "")
+    matching = [
+        hole for hole in holes
+        if hole.get("game_locked") is not True
+        and _hole_accepts_position(hole, candidate_position)
+    ]
+    if not matching:
+        return None
+
+    placement_row = _placement_row(snapshot, row.get("player_id"))
+    if not placement_row:
+        return None
+    weekly_gain = num(placement_row.get("risk_adjusted_current_week_marginal_points"))
+    min_gain = num(cfg.get("min_risk_adjusted_weekly_gain") or 3.0)
+    if weekly_gain < min_gain:
+        return None
+
+    return {
+        "hole": matching[0],
+        "weekly_gain": weekly_gain,
+        "estimated_rank_gain": int(placement_row.get("estimated_rank_gain") or 0),
+    }
+
+
 def _growth_discipline_reason(
     snapshot: dict,
     policy: dict,
@@ -112,6 +169,7 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     projection = num(inputs.get("projected_avg_points"))
     recent = inputs.get("recent_form") or {}
     tier = _tier_for(row, policy)
+    emergency = _emergency_repair_context(row, snapshot, policy)
     reasons = []
 
     if availability not in {"FREEAGENT", "WAIVERS"}:
@@ -156,6 +214,13 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
 
     signals = _confidence_signals(row)
     signal_count = sum(1 for ok in signals.values() if ok)
+
+    if emergency:
+        tier = {"name": "emergency_lineup_repair", "max_bid": 0}
+        reasons = [
+            reason for reason in reasons
+            if reason not in {"below_value_floor", "candidate_not_better_than_drop_asset"}
+        ]
 
     stash_cfg = policy.get("free_stash") or {}
     if tier is None and availability == "FREEAGENT" and stash_cfg.get("enabled") is True:
@@ -250,6 +315,9 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
         "selected_bid": bid,
         "placement_move_class": ((_placement_row(snapshot, row.get("player_id")) or {}).get("move_class")),
         "estimated_rank_gain": ((_placement_row(snapshot, row.get("player_id")) or {}).get("estimated_rank_gain")),
+        "emergency_repair": emergency is not None,
+        "emergency_hole": (emergency or {}).get("hole"),
+        "emergency_weekly_gain": (emergency or {}).get("weekly_gain"),
         "eligible": not reasons,
         "reasons": reasons,
     }
@@ -307,6 +375,8 @@ def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = Non
     ]
     eligible.sort(
         key=lambda row: (
+            1 if row.get("emergency_repair") else 0,
+            num(row.get("emergency_weekly_gain")),
             num(row.get("risk_adjusted_marginal_ppg")),
             num(row.get("expected_added_points_remaining")),
             -int(row.get("selected_bid") or 0),
