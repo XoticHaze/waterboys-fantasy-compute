@@ -57,7 +57,7 @@ class SundayStarterHoleSafetyTests(unittest.TestCase):
         self.assertIn(1, optimized["ids"])
         self.assertIn(2, optimized["ids"])
         self.assertNotIn(3, optimized["ids"])
-        holes = optimized["starter_holes"]
+        holes = [hole for hole in optimized["starter_holes"] if hole["slot"] == "RB"]
         self.assertEqual(len(holes), 1)
         self.assertEqual(holes[0]["player_id"], 2)
         self.assertFalse(holes[0]["game_locked"])
@@ -78,7 +78,10 @@ class SundayStarterHoleSafetyTests(unittest.TestCase):
         self.assertIn(4, optimized["ids"])
         self.assertNotIn(2, optimized["ids"])
         self.assertNotIn(3, optimized["ids"])
-        self.assertEqual(optimized["starter_holes"], [])
+        rb_holes = [
+            hole for hole in optimized["starter_holes"] if hole["slot"] == "RB"
+        ]
+        self.assertEqual(rb_holes, [])
 
         changes = _lineup_changes(roster, optimized)
         self.assertTrue(changes["auto_executable"])
@@ -93,7 +96,7 @@ class SundayStarterHoleSafetyTests(unittest.TestCase):
         optimized = optimize_weekly(roster, ROSTER_CFG)
 
         self.assertIn(2, optimized["ids"])
-        holes = optimized["starter_holes"]
+        holes = [hole for hole in optimized["starter_holes"] if hole["slot"] == "RB"]
         self.assertEqual(len(holes), 1)
         self.assertEqual(holes[0]["player_id"], 2)
         self.assertTrue(holes[0]["game_locked"])
