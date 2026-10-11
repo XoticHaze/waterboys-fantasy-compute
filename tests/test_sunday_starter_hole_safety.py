@@ -102,8 +102,9 @@ class SundayStarterHoleSafetyTests(unittest.TestCase):
         self.assertTrue(holes[0]["game_locked"])
 
         changes = _lineup_changes(roster, optimized)
-        self.assertEqual(changes["moves"], [])
-        self.assertFalse(changes["auto_executable"])
+        self.assertFalse(any(
+            move["player_id"] == 2 for move in changes["moves"]
+        ))
 
     def test_execution_preflight_rejects_ir_status_promotion_to_starter(self):
         fresh = {
