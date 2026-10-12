@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "sniper",
-  "nonce": "2026-10-09-post-waiver-safety-0020-cdt",
-  "reason": "Post-merge live verification: no stale waiver cancels and no IR casualty selection"
+  "nonce": "2026-10-12-monday-action-check-1420-cdt",
+  "reason": "Monday live WaterBoys action check after fresh snapshot"
 }
