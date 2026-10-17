@@ -245,6 +245,12 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     risk = num(value.get("risk_adjusted_marginal_ppg"))
     remaining = num(value.get("expected_added_points_remaining"))
     projection = num(inputs.get("projected_avg_points"))
+    current_week_projection = num(inputs.get("current_week_projected_points"))
+    current_week_points = inputs.get("current_week_points")
+    current_week_playable = (
+        current_week_projection > 0
+        or isinstance(current_week_points, (int, float))
+    )
     recent = inputs.get("recent_form") or {}
     tier = _tier_for(row, policy)
     emergency = _emergency_repair_context(row, snapshot, policy)
@@ -275,9 +281,30 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
             reasons.append("suggested_drop_does_not_free_active_slot")
         if projection <= drop_projection:
             reasons.append("candidate_not_better_than_drop_asset")
-        current_points = ((drop_live.get("current_week") or {}).get("points"))
+        drop_week = drop_live.get("current_week") or {}
+        current_points = drop_week.get("points")
         if isinstance(current_points, (int, float)):
             reasons.append("suggested_drop_may_be_game_locked")
+
+        drop_slot = str(drop_live.get("lineup_slot") or "").upper()
+        starter_slots = {"QB", "RB", "WR", "TE", "RB/WR/TE", "FLEX", "D/ST", "K"}
+        if drop_slot in starter_slots and not isinstance(current_points, (int, float)):
+            drop_week_projection = num(drop_week.get("projected_points"))
+            candidate_pos = str(row.get("position") or "")
+            slot_accepts_candidate = (
+                drop_slot == candidate_pos
+                or (
+                    drop_slot in {"RB/WR/TE", "FLEX"}
+                    and candidate_pos in {"RB", "WR", "TE"}
+                )
+                or (drop_slot == "D/ST" and candidate_pos == "D/ST")
+            )
+            if not current_week_playable:
+                reasons.append("candidate_not_playable_this_week_for_starter_drop")
+            elif not slot_accepts_candidate:
+                reasons.append("starter_drop_without_direct_weekly_replacement")
+            elif current_week_projection + 1e-9 < drop_week_projection:
+                reasons.append("current_week_starter_downgrade")
     elif active_roster_count >= roster_size:
         reasons.append("full_roster_without_safe_drop")
 
@@ -382,6 +409,8 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
         "risk_adjusted_marginal_ppg": risk,
         "expected_added_points_remaining": remaining,
         "projected_avg_points": projection,
+        "current_week_projected_points": current_week_projection,
+        "current_week_playable": current_week_playable,
         "recent_form": recent,
         "signals": signals,
         "signal_count": signal_count,

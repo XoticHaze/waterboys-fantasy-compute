@@ -90,7 +90,11 @@ def suggest_drop(roster: list[dict], candidate: dict, lineup_ids: set, roster_cf
     hard_limit = limits.get(limit_key)
     forced_position = (
         candidate_pos
-        if isinstance(hard_limit, int) and counts.get(candidate_pos, 0) >= hard_limit
+        if (
+            candidate_pos in {"K", "D/ST"} and counts.get(candidate_pos, 0) > 0
+        ) or (
+            isinstance(hard_limit, int) and counts.get(candidate_pos, 0) >= hard_limit
+        )
         else None
     )
 
@@ -277,6 +281,18 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
             "percent_owned": candidate.get("percent_owned"),
             "percent_started": candidate.get("percent_started"),
             "positional_rank": candidate.get("positional_rank"),
+            "current_week_projected_points": (
+                (candidate.get("current_week") or {}).get("projected_points")
+            ),
+            "current_week_points": (
+                (candidate.get("current_week") or {}).get("points")
+            ),
+            "current_week_opponent": (
+                (candidate.get("current_week") or {}).get("opponent")
+            ),
+            "current_week_date": (
+                (candidate.get("current_week") or {}).get("date")
+            ),
             "recent_form": candidate.get("recent_form") or {},
         },
         "value": {
