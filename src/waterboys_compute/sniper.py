@@ -7,6 +7,7 @@ from .normalize import utc_now
 
 
 BLOCKED_INJURY = {"OUT", "INJURY_RESERVE", "DOUBTFUL"}
+STARTER_SLOTS = {"QB", "RB", "WR", "TE", "RB/WR/TE", "FLEX", "D/ST", "K"}
 
 
 def num(value: Any) -> float:
@@ -128,6 +129,83 @@ def _emergency_repair_context(
     }
 
 
+def _emergency_safe_drop(
+    row: dict,
+    snapshot: dict,
+    emergency: dict | None,
+) -> dict | None:
+    if not emergency:
+        return row.get("suggested_drop")
+
+    roster = list((snapshot.get("waterboys") or {}).get("roster") or [])
+    by_id = {player.get("player_id"): player for player in roster}
+    candidate_pos = str(row.get("position") or "")
+    hole = emergency.get("hole") or {}
+
+    def locked(player: dict) -> bool:
+        return isinstance((player.get("current_week") or {}).get("points"), (int, float))
+
+    def descriptor(player: dict) -> dict:
+        return {
+            "player_id": player.get("player_id"),
+            "name": player.get("name"),
+            "position": player.get("position"),
+            "projected_avg_points": player.get("projected_avg_points"),
+        }
+
+    hole_id = hole.get("player_id")
+    hole_player = by_id.get(hole_id) if isinstance(hole_id, int) else None
+    if (
+        candidate_pos in {"K", "D/ST"}
+        and hole_player
+        and str(hole_player.get("lineup_slot") or "").upper() != "IR"
+        and not locked(hole_player)
+    ):
+        return descriptor(hole_player)
+
+    original = row.get("suggested_drop") or {}
+    original_live = by_id.get(original.get("player_id")) or {}
+    if (
+        original_live
+        and str(original_live.get("lineup_slot") or "").upper() == "BE"
+        and not locked(original_live)
+    ):
+        return descriptor(original_live)
+
+    limits = ((((snapshot.get("league") or {}).get("roster") or {}).get("position_limits")) or {})
+    limit_key = "DST" if candidate_pos == "D/ST" else candidate_pos
+    hard_limit = limits.get(limit_key)
+    position_count = sum(
+        1 for player in roster
+        if str(player.get("position") or "") == candidate_pos
+    )
+    force_same_position = (
+        isinstance(hard_limit, int) and position_count >= hard_limit
+    )
+
+    choices = []
+    for player in roster:
+        slot = str(player.get("lineup_slot") or "").upper()
+        if slot != "BE" or locked(player):
+            continue
+        if force_same_position and str(player.get("position") or "") != candidate_pos:
+            continue
+        current_week = player.get("current_week") or {}
+        current_projection = num(current_week.get("projected_points"))
+        has_game = bool(current_week.get("opponent") or current_week.get("date"))
+        unavailable_this_week = current_projection <= 0 and not has_game
+        choices.append((
+            0 if unavailable_this_week else 1,
+            num(player.get("projected_avg_points")),
+            player,
+        ))
+
+    if not choices:
+        return None
+    choices.sort(key=lambda item: (item[0], item[1]))
+    return descriptor(choices[0][2])
+
+
 def _growth_discipline_reason(
     snapshot: dict,
     policy: dict,
@@ -179,7 +257,7 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     if tier is None:
         reasons.append("below_value_floor")
 
-    drop = row.get("suggested_drop")
+    drop = _emergency_safe_drop(row, snapshot, emergency)
     roster = list((snapshot.get("waterboys") or {}).get("roster") or [])
     roster_by_id = {p.get("player_id"): p for p in roster}
     roster_size = int((((snapshot.get("league") or {}).get("roster") or {}).get("size") or 14))
