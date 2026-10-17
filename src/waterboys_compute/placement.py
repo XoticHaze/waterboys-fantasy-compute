@@ -422,99 +422,66 @@ def _lineup_changes(roster: list[dict], optimized: dict) -> dict:
 
 
 def commands_for_lineup_repair(snapshot: dict) -> list[dict]:
-    placement = snapshot.get("placement_engine") or {}
-    optimizer = placement.get("lineup_optimizer") or {}
+    optimizer = ((snapshot.get("placement_engine") or {}).get("lineup_optimizer") or {})
     changes = optimizer.get("recommended_changes") or {}
-    if changes.get("auto_executable") is not True:
-        return []
-
-    starts = list(changes.get("start") or [])
-    benches = list(changes.get("bench") or [])
-    if not starts or not benches:
-        command = command_for_lineup_repair(snapshot)
-        return [command] if command else []
-
-    roster = list((snapshot.get("waterboys") or {}).get("roster") or [])
-    roster_by_id = {player.get("player_id"): player for player in roster}
-    remaining_benches = list(benches)
-    commands = []
+    components = [
+        row for row in (changes.get("components") or [])
+        if row.get("auto_executable") is True
+    ]
     stamp = str(snapshot.get("collected_at") or "unknown").replace(":", "").replace("-", "").replace(".", "")
 
-    for index, start in enumerate(starts):
-        to_slot = str(start.get("to_slot") or "")
-        match_index = next(
-            (
-                idx for idx, bench in enumerate(remaining_benches)
-                if str(bench.get("from_slot") or "") == to_slot
-            ),
-            None,
-        )
-        if match_index is None:
-            continue
+    if components:
+        return [
+            {
+                "schema": "waterboys.command.v1",
+                "command_id": f"placement-lineup-{stamp}-component-{row.get('component_id')}",
+                "action": "lineup_move",
+                "dry_run": False,
+                "moves": list(row.get("moves") or []),
+                "preconditions": {
+                    "reason": "automatic weekly placement-engine atomic lineup repair",
+                    "projected_lineup_leakage": optimizer.get("projected_lineup_leakage"),
+                    "component_id": row.get("component_id"),
+                    "slots": row.get("slots"),
+                    "player_ids": row.get("player_ids"),
+                    "kickoff": row.get("kickoff"),
+                    "projected_component_gain": row.get("projected_gain"),
+                },
+            }
+            for row in components
+        ]
 
-        bench = remaining_benches.pop(match_index)
-        start_id = int(start["player_id"])
-        bench_id = int(bench["player_id"])
-        start_live = roster_by_id.get(start_id) or {}
-        bench_live = roster_by_id.get(bench_id) or {}
-        start_week = start_live.get("current_week") or {}
-        bench_week = bench_live.get("current_week") or {}
-        kickoff = (
-            start_week.get("date")
-            or bench_week.get("date")
-            or "9999-12-31 23:59:59"
-        )
-        projected_gain = round(
-            weekly_projection(start_live) - weekly_projection(bench_live),
-            4,
-        )
-        commands.append({
-            "schema": "waterboys.command.v1",
-            "command_id": f"placement-lineup-{stamp}-pair-{index + 1}",
-            "action": "lineup_move",
-            "dry_run": False,
-            "moves": [
-                {
-                    "player_id": bench_id,
-                    "from_slot": str(bench["from_slot"]),
-                    "to_slot": "BE",
-                },
-                {
-                    "player_id": start_id,
-                    "from_slot": str(start["from_slot"]),
-                    "to_slot": to_slot,
-                },
-            ],
-            "preconditions": {
-                "reason": "automatic weekly placement-engine atomic lineup repair",
-                "projected_lineup_leakage": optimizer.get("projected_lineup_leakage"),
-                "projected_pair_gain": projected_gain,
-                "kickoff": kickoff,
-                "pair": {
-                    "bench_player_id": bench_id,
-                    "start_player_id": start_id,
-                    "slot": to_slot,
-                },
-            },
-        })
-
-    commands.sort(
-        key=lambda command: (
-            str((command.get("preconditions") or {}).get("kickoff") or "9999-12-31 23:59:59"),
-            -num((command.get("preconditions") or {}).get("projected_pair_gain")),
-            str(command.get("command_id") or ""),
-        )
-    )
-    return commands
+    moves = changes.get("moves") or []
+    if not moves or changes.get("auto_executable") is not True:
+        return []
+    return [{
+        "schema": "waterboys.command.v1",
+        "command_id": f"placement-lineup-{stamp}",
+        "action": "lineup_move",
+        "dry_run": False,
+        "moves": [
+            {
+                "player_id": int(row["player_id"]),
+                "from_slot": str(row["from_slot"]),
+                "to_slot": str(row["to_slot"]),
+            }
+            for row in moves
+        ],
+        "preconditions": {
+            "reason": "automatic weekly placement-engine lineup repair",
+            "projected_lineup_leakage": optimizer.get("projected_lineup_leakage"),
+        },
+    }]
 
 
 def command_for_lineup_repair(snapshot: dict) -> dict | None:
-    placement = snapshot.get("placement_engine") or {}
-    optimizer = placement.get("lineup_optimizer") or {}
-    changes = optimizer.get("recommended_changes") or {}
-    moves = changes.get("moves") or []
-    if not moves or changes.get("auto_executable") is not True:
+    commands = commands_for_lineup_repair(snapshot)
+    if not commands:
         return None
+    if len(commands) == 1:
+        return commands[0]
+
+    optimizer = ((snapshot.get("placement_engine") or {}).get("lineup_optimizer") or {})
     stamp = str(snapshot.get("collected_at") or "unknown").replace(":", "").replace("-", "").replace(".", "")
     return {
         "schema": "waterboys.command.v1",
@@ -522,16 +489,12 @@ def command_for_lineup_repair(snapshot: dict) -> dict | None:
         "action": "lineup_move",
         "dry_run": False,
         "moves": [
-            {
-                "player_id": int(move["player_id"]),
-                "from_slot": str(move["from_slot"]),
-                "to_slot": str(move["to_slot"]),
-            }
-            for move in moves
+            move for command in commands for move in (command.get("moves") or [])
         ],
         "preconditions": {
             "reason": "automatic weekly placement-engine lineup repair",
             "projected_lineup_leakage": optimizer.get("projected_lineup_leakage"),
+            "component_count": len(commands),
         },
     }
 
