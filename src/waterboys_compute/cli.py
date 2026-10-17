@@ -6,8 +6,77 @@ import json
 from .broker import Broker
 from .collector import collect_player_history, collect_snapshot
 from .command import execute_guarded
-from .placement import command_for_lineup_repair
+from .placement import commands_for_lineup_repair
 from .sniper import command_for_cancel, command_for_selection, plan_sniper
+
+
+def _lineup_command_signature(command: dict) -> tuple:
+    pair = (command.get("preconditions") or {}).get("pair") or {}
+    if pair:
+        return (
+            pair.get("bench_player_id"),
+            pair.get("start_player_id"),
+            pair.get("slot"),
+        )
+    return (command.get("command_id"),)
+
+
+def _execute_lineup_repairs(
+    runtime: dict,
+    broker: Broker,
+    snapshot: dict,
+    executions: list[dict],
+    *,
+    max_attempts: int = 12,
+) -> tuple[dict, int]:
+    failed = set()
+    verified_count = 0
+
+    for _ in range(max_attempts):
+        commands = commands_for_lineup_repair(snapshot)
+        command = next(
+            (
+                item for item in commands
+                if _lineup_command_signature(item) not in failed
+            ),
+            None,
+        )
+        if command is None:
+            break
+
+        signature = _lineup_command_signature(command)
+        try:
+            receipt = execute_guarded(
+                runtime,
+                {"status": "pending", "command": command},
+            )
+            broker_result = broker.publish_receipt(receipt)
+            executions.append({
+                "receipt": receipt,
+                "broker_result": broker_result,
+            })
+            if receipt.get("status") == "verified":
+                verified_count += 1
+                snapshot = collect_snapshot(runtime)
+                continue
+            failed.add(signature)
+        except Exception as exc:
+            executions.append({
+                "receipt": {
+                    "command_id": command.get("command_id"),
+                    "action": "lineup_move",
+                    "status": "placement_lineup_error",
+                    "mutation_attempted": False,
+                    "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                    "lineup_pair": (
+                        (command.get("preconditions") or {}).get("pair")
+                    ),
+                },
+                "broker_result": None,
+            })
+            failed.add(signature)
+
+    return snapshot, verified_count
 
 
 def main() -> int:
@@ -51,28 +120,12 @@ def main() -> int:
     lineup_repair_count = 0
 
     if live:
-        lineup_command = command_for_lineup_repair(snapshot)
-        if lineup_command:
-            try:
-                receipt = execute_guarded(
-                    runtime,
-                    {"status": "pending", "command": lineup_command},
-                )
-                broker_result = broker.publish_receipt(receipt)
-                executions.append({"receipt": receipt, "broker_result": broker_result})
-                lineup_repair_count = 1
-                if receipt.get("status") == "verified":
-                    snapshot = collect_snapshot(runtime)
-            except Exception as exc:
-                executions.append({
-                    "receipt": {
-                        "command_id": lineup_command.get("command_id"),
-                        "status": "placement_lineup_error",
-                        "mutation_attempted": False,
-                        "error": f"{type(exc).__name__}: {str(exc)[:240]}",
-                    },
-                    "broker_result": None,
-                })
+        snapshot, lineup_repair_count = _execute_lineup_repairs(
+            runtime,
+            broker,
+            snapshot,
+            executions,
+        )
 
     history_error = None
     try:
@@ -177,32 +230,13 @@ def main() -> int:
         snapshot = collect_snapshot(runtime)
 
         if verified_roster_add:
-            followup_lineup = command_for_lineup_repair(snapshot)
-            if followup_lineup:
-                try:
-                    followup_receipt = execute_guarded(
-                        runtime,
-                        {"status": "pending", "command": followup_lineup},
-                    )
-                    followup_result = broker.publish_receipt(followup_receipt)
-                    executions.append({
-                        "receipt": followup_receipt,
-                        "broker_result": followup_result,
-                    })
-                    lineup_repair_count += 1
-                    if followup_receipt.get("status") == "verified":
-                        snapshot = collect_snapshot(runtime)
-                except Exception as exc:
-                    executions.append({
-                        "receipt": {
-                            "command_id": followup_lineup.get("command_id"),
-                            "action": "lineup_move",
-                            "status": "post_acquisition_lineup_error",
-                            "mutation_attempted": False,
-                            "error": f"{type(exc).__name__}: {str(exc)[:240]}",
-                        },
-                        "broker_result": None,
-                    })
+            snapshot, followup_count = _execute_lineup_repairs(
+                runtime,
+                broker,
+                snapshot,
+                executions,
+            )
+            lineup_repair_count += followup_count
 
         snapshot_result = broker.publish_snapshot(snapshot)
         report["post_action_snapshot_collected_at"] = snapshot.get("collected_at")
@@ -210,8 +244,11 @@ def main() -> int:
     report["executions"] = [
         {
             "command_id": item["receipt"].get("command_id"),
+            "action": item["receipt"].get("action"),
             "status": item["receipt"].get("status"),
             "mutation_attempted": item["receipt"].get("mutation_attempted"),
+            "error": item["receipt"].get("error"),
+            "lineup_pair": item["receipt"].get("lineup_pair"),
         }
         for item in executions
     ]
