@@ -6,7 +6,7 @@ import json
 from .broker import Broker
 from .collector import collect_player_history, collect_snapshot
 from .command import execute_guarded
-from .placement import commands_for_lineup_repair
+from .placement import command_for_lineup_repair, commands_for_lineup_repair
 from .sniper import command_for_cancel, command_for_selection, plan_sniper
 
 
