@@ -68,6 +68,25 @@ class Week6LockByeSafetyTests(unittest.TestCase):
         self.assertEqual(holes[0]["player_id"], 20)
         self.assertFalse(holes[0]["game_locked"])
 
+
+    def test_locked_flex_stays_in_flex_and_does_not_hide_wr_bye_hole(self):
+        bye = player(40, "Jefferson", "WR", 0, 24, "WR", "ACTIVE")
+        bye["current_week"]["opponent"] = None
+        bye["current_week"]["date"] = None
+        roster = [
+            bye,
+            player(41, "Wilson", "WR", 19, 20, "WR", "ACTIVE"),
+            player(42, "Shaheed", "WR", 22, 22, "RB/WR/TE", "ACTIVE", points=28.6),
+            player(43, "Kincaid", "TE", 11, 11, "BE", "ACTIVE"),
+        ]
+        optimized = optimize_weekly(roster, ROSTER_CFG)
+        rows = {row["player_id"]: row for row in optimized["players"]}
+        self.assertEqual(rows[42]["assigned_slot"], "RB/WR/TE")
+        self.assertNotIn(43, optimized["ids"])
+        holes = [hole for hole in optimized["starter_holes"] if hole["slot"] == "WR"]
+        self.assertEqual(len(holes), 1)
+        self.assertEqual(holes[0]["player_id"], 40)
+
     def test_positive_projection_is_eligible_even_without_schedule_metadata(self):
         candidate = player(30, "Free Agent WR", "WR", 18, 18, "BE", "ACTIVE")
         candidate["current_week"]["opponent"] = None
