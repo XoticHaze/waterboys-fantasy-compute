@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute_command",
-  "nonce": "2026-10-17-bucs-dst-final",
-  "reason": "Execute Week 6 Buccaneers DST coverage command"
+  "nonce": "2026-10-17-bucs-dst-final-retry",
+  "reason": "Retry same pending Week 6 Buccaneers DST command"
 }
