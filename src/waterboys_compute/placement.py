@@ -30,10 +30,18 @@ def _game_locked(player: dict) -> bool:
 
 
 def starter_eligible(player: dict) -> bool:
-    return (
-        _lineup_slot(player) != "IR"
-        and _injury_status(player) not in BLOCKED_START_STATUSES
-    )
+    slot = _lineup_slot(player)
+    current_week = player.get("current_week") or {}
+    projection = num(current_week.get("projected_points"))
+    has_game = bool(current_week.get("opponent") or current_week.get("date"))
+
+    if slot == "IR" or _injury_status(player) in BLOCKED_START_STATUSES:
+        return False
+    if _game_locked(player) and slot not in STARTER_SLOTS:
+        return False
+    if projection <= 0 and not has_game and not _game_locked(player):
+        return False
+    return True
 
 
 def weekly_projection(player: dict) -> float:
