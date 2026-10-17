@@ -78,6 +78,7 @@ class Week6LockByeSafetyTests(unittest.TestCase):
             player(41, "Wilson", "WR", 19, 20, "WR", "ACTIVE"),
             player(42, "Shaheed", "WR", 22, 22, "RB/WR/TE", "ACTIVE", points=28.6),
             player(43, "Kincaid", "TE", 11, 11, "BE", "ACTIVE"),
+            player(44, "Fannin", "TE", 13, 13, "TE", "ACTIVE"),
         ]
         optimized = optimize_weekly(roster, ROSTER_CFG)
         rows = {row["player_id"]: row for row in optimized["players"]}
