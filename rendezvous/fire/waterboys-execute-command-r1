@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
-  "action": "execute-command",
-  "nonce": "2026-10-06-protect-monangai-cancel-pollard-1308-cdt",
-  "reason": "Cancel stale Pollard claim that conditionally drops Kyle Monangai"
+  "action": "execute_command",
+  "nonce": "2026-10-17-week6-devonta-repair",
+  "reason": "Execute proven single-command Week 6 DeVonta Smith roster repair"
 }
