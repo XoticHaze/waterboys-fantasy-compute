@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute_command",
-  "nonce": "2026-10-17-start-bucs-dst",
-  "reason": "Start Buccaneers DST in Week 6"
+  "nonce": "2026-10-17-bucs-lineup-2",
+  "reason": "Execute pending Buccaneers DST lineup command"
 }
