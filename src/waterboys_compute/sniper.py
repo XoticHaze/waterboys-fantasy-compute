@@ -39,12 +39,6 @@ def _prior_observation(row: dict, previous_report: dict | None) -> dict | None:
 def _confidence_signals(row: dict) -> dict:
     inputs = row.get("inputs") or {}
     projection = num(inputs.get("projected_avg_points"))
-    current_week_projection = num(inputs.get("current_week_projected_points"))
-    current_week_points = inputs.get("current_week_points")
-    current_week_playable = (
-        current_week_projection > 0
-        or isinstance(current_week_points, (int, float))
-    )
     recent = inputs.get("recent_form") or {}
     recent_median = num(recent.get("median"))
     season_avg = num(inputs.get("avg_points"))
@@ -251,6 +245,12 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     risk = num(value.get("risk_adjusted_marginal_ppg"))
     remaining = num(value.get("expected_added_points_remaining"))
     projection = num(inputs.get("projected_avg_points"))
+    current_week_projection = num(inputs.get("current_week_projected_points"))
+    current_week_points = inputs.get("current_week_points")
+    current_week_playable = (
+        current_week_projection > 0
+        or isinstance(current_week_points, (int, float))
+    )
     recent = inputs.get("recent_form") or {}
     tier = _tier_for(row, policy)
     emergency = _emergency_repair_context(row, snapshot, policy)
