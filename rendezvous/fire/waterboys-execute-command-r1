@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute_command",
-  "nonce": "2026-10-17-dike-final",
-  "reason": "Execute Week 6 Dike coverage command"
+  "nonce": "2026-10-17-bucs-dst-final",
+  "reason": "Execute Week 6 Buccaneers DST coverage command"
 }
