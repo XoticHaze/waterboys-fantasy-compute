@@ -292,117 +292,132 @@ def _slot_accepts(position: str, slot: str) -> bool:
 
 
 def _lineup_changes(roster: list[dict], optimized: dict) -> dict:
-    roster_by_id = {player.get("player_id"): player for player in roster}
-    current_starters = {
-        player.get("player_id"): str(player.get("lineup_slot") or "")
-        for player in roster
-        if str(player.get("lineup_slot") or "") in STARTER_SLOTS
+    roster_by_id = {p.get("player_id"): p for p in roster}
+    current = {
+        p.get("player_id"): str(p.get("lineup_slot") or "")
+        for p in roster
+        if str(p.get("lineup_slot") or "") in STARTER_SLOTS
     }
     target_rows = {
-        player.get("player_id"): player
-        for player in optimized.get("players") or []
+        p.get("player_id"): p for p in (optimized.get("players") or [])
     }
-    target_ids = set(target_rows)
-    current_ids = set(current_starters)
+    target = {
+        pid: str(row.get("assigned_slot") or "")
+        for pid, row in target_rows.items()
+    }
 
-    outgoing_ids = [
-        player_id for player_id in current_ids
-        if player_id not in target_ids
-    ]
-    incoming_ids = [
-        player_id for player_id in target_ids
-        if player_id not in current_ids
-    ]
+    detail = []
+    starts, benches, reassign = [], [], []
 
-    vacated = [
-        {
-            "player_id": player_id,
-            "slot": current_starters[player_id],
+    def add(pid, from_slot, to_slot, kind):
+        p = roster_by_id.get(pid) or {}
+        row = {
+            "player_id": pid,
+            "name": p.get("name"),
+            "position": p.get("position"),
+            "from_slot": from_slot,
+            "to_slot": to_slot,
+            "projected_points": weekly_projection(p),
+            "kind": kind,
         }
-        for player_id in outgoing_ids
-    ]
+        detail.append(row)
+        {"start": starts, "bench": benches, "reassign": reassign}[kind].append(dict(row))
 
-    assignments = {}
-    remaining_slots = list(vacated)
-    for player_id in incoming_ids:
-        player = roster_by_id.get(player_id) or {}
-        position = str(player.get("position") or "")
-        exact_index = next(
-            (
-                index for index, row in enumerate(remaining_slots)
-                if row["slot"] == position
-            ),
-            None,
-        )
-        compatible_index = next(
-            (
-                index for index, row in enumerate(remaining_slots)
-                if _slot_accepts(position, row["slot"])
-            ),
-            None,
-        )
-        index = exact_index if exact_index is not None else compatible_index
-        if index is None:
-            assignments[player_id] = str(
-                (target_rows.get(player_id) or {}).get("assigned_slot") or ""
+    for pid, from_slot in current.items():
+        to_slot = target.get(pid)
+        if to_slot is None:
+            add(pid, from_slot, "BE", "bench")
+        elif to_slot != from_slot:
+            add(pid, from_slot, to_slot, "reassign")
+
+    for pid, to_slot in target.items():
+        if pid in current:
+            continue
+        p = roster_by_id.get(pid) or {}
+        add(pid, str(p.get("lineup_slot") or "BE"), to_slot, "start")
+
+    components = []
+    for row in detail:
+        slots = {
+            s for s in (row["from_slot"], row["to_slot"])
+            if s in STARTER_SLOTS
+        }
+        overlaps = [
+            i for i, comp in enumerate(components)
+            if slots & comp["slots"]
+        ]
+        if not overlaps:
+            components.append({"slots": set(slots), "rows": [row]})
+            continue
+        base = overlaps[0]
+        components[base]["slots"].update(slots)
+        components[base]["rows"].append(row)
+        for i in reversed(overlaps[1:]):
+            components[base]["slots"].update(components[i]["slots"])
+            components[base]["rows"].extend(components[i]["rows"])
+            components.pop(i)
+
+    packed = []
+    locked_all = []
+    for i, comp in enumerate(components, 1):
+        pids = {row["player_id"] for row in comp["rows"]}
+        locked = sorted(
+            pid for pid in pids
+            if isinstance(
+                ((roster_by_id.get(pid) or {}).get("current_week") or {}).get("points"),
+                (int, float),
             )
-        else:
-            assignments[player_id] = remaining_slots.pop(index)["slot"]
-
-    starts = []
-    benches = []
-    moves = []
-    locked = []
-
-    for player_id in outgoing_ids:
-        player = roster_by_id.get(player_id) or {}
-        from_slot = current_starters[player_id]
-        move = {
-            "player_id": player_id,
-            "name": player.get("name"),
-            "position": player.get("position"),
-            "from_slot": from_slot,
-            "to_slot": "BE",
-            "projected_points": weekly_projection(player),
-        }
-        benches.append(move)
-        moves.append({
-            "player_id": player_id,
-            "from_slot": from_slot,
-            "to_slot": "BE",
-        })
-        if isinstance((player.get("current_week") or {}).get("points"), (int, float)):
-            locked.append(player_id)
-
-    for player_id in incoming_ids:
-        player = roster_by_id.get(player_id) or {}
-        from_slot = str(player.get("lineup_slot") or "BE")
-        to_slot = assignments.get(player_id) or str(
-            (target_rows.get(player_id) or {}).get("assigned_slot") or ""
         )
-        move = {
-            "player_id": player_id,
-            "name": player.get("name"),
-            "position": player.get("position"),
-            "from_slot": from_slot,
-            "to_slot": to_slot,
-            "projected_points": weekly_projection(player),
-        }
-        starts.append(move)
-        moves.append({
-            "player_id": player_id,
-            "from_slot": from_slot,
-            "to_slot": to_slot,
+        locked_all.extend(locked)
+        dates = [
+            str(((roster_by_id.get(pid) or {}).get("current_week") or {}).get("date"))
+            for pid in pids
+            if ((roster_by_id.get(pid) or {}).get("current_week") or {}).get("date")
+        ]
+        gain = round(
+            sum(row["projected_points"] for row in comp["rows"] if row["kind"] == "start")
+            - sum(row["projected_points"] for row in comp["rows"] if row["kind"] == "bench"),
+            4,
+        )
+        packed.append({
+            "component_id": i,
+            "slots": sorted(comp["slots"]),
+            "moves": [
+                {
+                    "player_id": int(row["player_id"]),
+                    "from_slot": str(row["from_slot"]),
+                    "to_slot": str(row["to_slot"]),
+                }
+                for row in comp["rows"]
+            ],
+            "player_ids": sorted(pids),
+            "game_locked_player_ids": locked,
+            "kickoff": min(dates) if dates else "9999-12-31 23:59:59",
+            "projected_gain": gain,
+            "auto_executable": bool(comp["rows"]) and not locked,
         })
-        if isinstance((player.get("current_week") or {}).get("points"), (int, float)):
-            locked.append(player_id)
+
+    packed.sort(key=lambda x: (
+        str(x.get("kickoff") or "9999-12-31 23:59:59"),
+        -num(x.get("projected_gain")),
+        int(x.get("component_id") or 0),
+    ))
 
     return {
         "start": starts,
         "bench": benches,
-        "moves": moves,
-        "game_locked_player_ids": sorted(set(locked)),
-        "auto_executable": bool(moves) and not locked,
+        "reassign": reassign,
+        "moves": [
+            {
+                "player_id": int(row["player_id"]),
+                "from_slot": str(row["from_slot"]),
+                "to_slot": str(row["to_slot"]),
+            }
+            for row in detail
+        ],
+        "components": packed,
+        "game_locked_player_ids": sorted(set(locked_all)),
+        "auto_executable": any(x.get("auto_executable") is True for x in packed),
     }
 
 
