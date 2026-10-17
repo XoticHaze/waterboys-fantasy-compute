@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute_command",
-  "nonce": "2026-10-17-week6-dike-repair",
-  "reason": "Execute proven single-command Week 6 Chimere Dike roster repair"
+  "nonce": "2026-10-17-dike-final",
+  "reason": "Execute Week 6 Dike coverage command"
 }
