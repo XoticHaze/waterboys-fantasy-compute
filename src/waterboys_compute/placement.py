@@ -102,7 +102,9 @@ def optimize_weekly(players: list[dict], roster_cfg: dict, *, risk_adjusted: boo
         if remaining > 0:
             eligible = [
                 player for player in pool
-                if player.get("player_id") not in ids and starter_eligible(player)
+                if player.get("player_id") not in ids
+                and not _game_locked(player)
+                and starter_eligible(player)
             ]
             eligible.sort(key=score, reverse=True)
             for player in eligible[:remaining]:
@@ -147,6 +149,7 @@ def optimize_weekly(players: list[dict], roster_cfg: dict, *, risk_adjusted: boo
             player for player in players
             if player.get("position") in FLEX
             and player.get("player_id") not in ids
+            and not _game_locked(player)
             and starter_eligible(player)
         ]
         flex.sort(key=score, reverse=True)
