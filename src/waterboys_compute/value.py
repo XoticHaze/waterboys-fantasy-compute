@@ -416,7 +416,7 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
             })
             continue
 
-        if result.startswith("FAILED_"):
+        if result.startswith("FAILED"):
             if key in seen_failed:
                 continue
             seen_failed.add(key)
@@ -467,6 +467,7 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
             "sample_size": len(failed_sample),
             "median": percentile(failed_bids, 0.50),
             "p75": percentile(failed_bids, 0.75),
+            "p90": percentile(failed_bids, 0.90),
             "max": max(failed_bids) if failed_bids else None,
             "recent_signals": sorted(
                 failed_sample,
