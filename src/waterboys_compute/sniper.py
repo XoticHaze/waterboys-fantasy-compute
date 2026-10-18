@@ -320,6 +320,34 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
     signals = _confidence_signals(row)
     signal_count = sum(1 for ok in signals.values() if ok)
 
+    placement_row = _placement_row(snapshot, row.get("player_id")) or {}
+    placement_move_class = placement_row.get("move_class")
+    injury_cfg = ((policy.get("trap_guards") or {}).get("injury") or {})
+    soft_statuses = set(
+        injury_cfg.get("soft_block_statuses")
+        or ["QUESTIONABLE", "DAY_TO_DAY"]
+    )
+    if injury in soft_statuses:
+        if (
+            injury_cfg.get("soft_status_require_current_week_playable", True)
+            and not current_week_playable
+        ):
+            reasons.append("soft_injury_not_playable_this_week")
+        if risk < num(
+            injury_cfg.get("soft_status_min_risk_adjusted_marginal_ppg") or 3.0
+        ):
+            reasons.append("soft_injury_below_value_floor")
+        if signal_count < int(
+            injury_cfg.get("soft_status_min_independent_value_signals") or 2
+        ):
+            reasons.append("soft_injury_insufficient_value_signals")
+        allowed_classes = set(
+            injury_cfg.get("soft_status_allowed_move_classes")
+            or ["material", "launch"]
+        )
+        if placement_move_class not in allowed_classes:
+            reasons.append("soft_injury_requires_material_or_launch")
+
     if emergency:
         tier = {"name": "emergency_lineup_repair", "max_bid": 0}
         reasons = [
@@ -357,7 +385,12 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
 
     guards = policy.get("trap_guards") or {}
     large_threshold = int((guards.get("valuation") or {}).get("large_bid_threshold") or 100)
-    if availability == "WAIVERS" and hard_cap >= large_threshold:
+    large_bid_intent = (
+        min(max(1, recommended), hard_cap)
+        if availability == "WAIVERS" and hard_cap > 0
+        else 0
+    )
+    if availability == "WAIVERS" and large_bid_intent >= large_threshold:
         if injury == "QUESTIONABLE":
             reasons.append("questionable_blocks_large_bid")
         if int(recent.get("games_count") or 0) < int((guards.get("recent_form") or {}).get("min_games_for_large_bid") or 2):
@@ -399,6 +432,11 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
         if discipline_reason:
             reasons.append(discipline_reason)
 
+    if injury in soft_statuses:
+        max_soft_bid = int(injury_cfg.get("soft_status_max_bid") or 25)
+        if bid > max_soft_bid:
+            reasons.append("soft_injury_bid_above_cap")
+
     return {
         "player_id": row.get("player_id"),
         "name": row.get("name"),
@@ -420,8 +458,8 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
         "recommended_bid": recommended,
         "hard_cap": hard_cap,
         "selected_bid": bid,
-        "placement_move_class": ((_placement_row(snapshot, row.get("player_id")) or {}).get("move_class")),
-        "estimated_rank_gain": ((_placement_row(snapshot, row.get("player_id")) or {}).get("estimated_rank_gain")),
+        "placement_move_class": placement_move_class,
+        "estimated_rank_gain": placement_row.get("estimated_rank_gain"),
         "emergency_repair": emergency is not None,
         "emergency_hole": (emergency or {}).get("hole"),
         "emergency_weekly_gain": (emergency or {}).get("weekly_gain"),
