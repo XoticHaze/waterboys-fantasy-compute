@@ -574,8 +574,11 @@ class ContractTests(unittest.TestCase):
             },
         ]
         market_ref = market_reference(candidate, {"successful_waiver_bids": []}, offers)
-        self.assertEqual(market_ref["sample_size"], 1)
-        self.assertEqual(market_ref["p90"], 20)
+        self.assertEqual(market_ref["sample_size"], 0)
+        self.assertIsNone(market_ref["p90"])
+        self.assertEqual(market_ref["failed_demand"]["sample_size"], 1)
+        self.assertEqual(market_ref["failed_demand"]["p90"], 20)
+        self.assertFalse(market_ref["failed_demand"]["clearing_price_eligible"])
 
     def test_broker_reads_large_private_files_via_git_blob_fallback(self):
         worker = (ROOT / "cloudflare/waterboys-broker/src/index.js").read_text(
