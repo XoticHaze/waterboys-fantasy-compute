@@ -612,6 +612,32 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
         roster_cfg,
         weeks,
     )
+    trade_asset_by_id = {
+        row.get("player_id"): row
+        for row in trade_assets
+        if row.get("trade_before_drop") is True
+    }
+    for board_rows in (
+        waivers,
+        releases,
+        projected_releases,
+        trades,
+    ):
+        for row in board_rows:
+            drop = row.get("suggested_drop") or {}
+            asset = trade_asset_by_id.get(drop.get("player_id"))
+            if not asset:
+                continue
+            drop["trade_before_drop"] = True
+            drop["trade_leverage"] = {
+                "scarcity_over_best_free_ppg": asset.get(
+                    "scarcity_over_best_free_ppg"
+                ),
+                "mutually_beneficial_trade_count": asset.get(
+                    "mutually_beneficial_trade_count"
+                ),
+                "best_trade_return": asset.get("best_trade_return"),
+            }
 
     return {
         "schema": "waterboys.value_engine.v1", "status": "advisory",
