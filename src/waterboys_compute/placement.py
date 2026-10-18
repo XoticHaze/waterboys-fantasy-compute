@@ -942,6 +942,8 @@ def build_placement_engine(
         "best_acquisitions": board[:50],
         "weekly_rank_up_targets": weekly_board[:30],
         "durable_rank_up_targets": durable_board[:30],
+        "trade_exchange_targets": (value_engine.get("trade_exchange_targets") or [])[:50],
+        "trade_assets": value_engine.get("trade_assets") or [],
         "portfolio_scenarios": {
             "pending_claims": pending_portfolio,
             "pending_plus_best_launch": pending_plus_launch,
@@ -957,8 +959,12 @@ def build_placement_engine(
             ),
             "rank_after_move": (
                 "Uses risk-adjusted current-week marginal lineup points where player weekly "
-                "projections are available. Trade rows remain gross because outgoing trade "
-                "cost is not modeled."
+                "projections are available. Gross trade-target rows remain discovery-only."
+            ),
+            "trade_exchange": (
+                "Trade exchange targets separately simulate both sides of a one-for-one deal. "
+                "Mutually beneficial rows improve both optimized health-adjusted lineups; "
+                "trade assets flag scarce low-lineup-cost players that should be shopped before dropped."
             ),
             "boards": (
                 "best_acquisitions blends durable value with immediate rank gain; "
