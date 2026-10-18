@@ -65,6 +65,221 @@ def optimize(players: list[dict], roster_cfg: dict) -> dict:
     }
 
 
+def risk_adjusted_optimize(players: list[dict], roster_cfg: dict) -> dict:
+    adjusted = []
+    for player in players:
+        row = dict(player)
+        row["projected_avg_points"] = round(
+            num(player.get("projected_avg_points")) * availability(player),
+            4,
+        )
+        adjusted.append(row)
+    return optimize(adjusted, roster_cfg)
+
+
+def _swap_roster(
+    roster: list[dict],
+    outgoing_id: int | None,
+    incoming: dict,
+) -> list[dict]:
+    result = [
+        player for player in roster
+        if player.get("player_id") != outgoing_id
+    ]
+    result.append(incoming)
+    return result
+
+
+def build_trade_exchange_board(
+    waterboys: dict,
+    teams: list[dict],
+    free_agents: list[dict],
+    roster_cfg: dict,
+    weeks: int,
+) -> tuple[list[dict], list[dict]]:
+    our_roster = list(waterboys.get("roster") or [])
+    our_id = waterboys.get("team_id")
+    eligible_positions = {"QB", "RB", "WR", "TE"}
+    our_assets = [
+        player for player in our_roster
+        if player.get("position") in eligible_positions
+        and str(player.get("lineup_slot") or "").upper() != "IR"
+    ]
+    our_base = risk_adjusted_optimize(our_roster, roster_cfg)
+    exchanges = []
+
+    for team in teams:
+        if team.get("team_id") == our_id or int(team.get("roster_count") or 0) <= 0:
+            continue
+        rival_roster = list(team.get("roster") or [])
+        rival_base = risk_adjusted_optimize(rival_roster, roster_cfg)
+
+        for incoming in rival_roster:
+            if incoming.get("position") not in eligible_positions:
+                continue
+            if str(incoming.get("lineup_slot") or "").upper() == "IR":
+                continue
+
+            for outgoing in our_assets:
+                if outgoing.get("player_id") == incoming.get("player_id"):
+                    continue
+
+                our_after = risk_adjusted_optimize(
+                    _swap_roster(
+                        our_roster,
+                        outgoing.get("player_id"),
+                        incoming,
+                    ),
+                    roster_cfg,
+                )
+                rival_after = risk_adjusted_optimize(
+                    _swap_roster(
+                        rival_roster,
+                        incoming.get("player_id"),
+                        outgoing,
+                    ),
+                    roster_cfg,
+                )
+                our_delta = round(
+                    num(our_after.get("projected_ppg"))
+                    - num(our_base.get("projected_ppg")),
+                    4,
+                )
+                rival_delta = round(
+                    num(rival_after.get("projected_ppg"))
+                    - num(rival_base.get("projected_ppg")),
+                    4,
+                )
+                if our_delta <= 0:
+                    continue
+
+                incoming_scarcity, incoming_replacement = replacement(
+                    incoming, free_agents
+                )
+                outgoing_scarcity, outgoing_replacement = replacement(
+                    outgoing, free_agents
+                )
+                mutual = rival_delta >= 0
+                acceptance = (
+                    "mutual_gain"
+                    if mutual and rival_delta > 0
+                    else "rival_flat"
+                    if mutual
+                    else "rival_concession_needed"
+                )
+                exchanges.append({
+                    "trade_type": "one_for_one",
+                    "source_team_id": team.get("team_id"),
+                    "source_team": team.get("name"),
+                    "incoming": {
+                        "player_id": incoming.get("player_id"),
+                        "name": incoming.get("name"),
+                        "position": incoming.get("position"),
+                        "injury_status": incoming.get("injury_status"),
+                        "projected_avg_points": incoming.get("projected_avg_points"),
+                        "availability_factor": availability(incoming),
+                        "scarcity_over_best_free_ppg": incoming_scarcity,
+                        "best_free_replacement": incoming_replacement,
+                    },
+                    "outgoing": {
+                        "player_id": outgoing.get("player_id"),
+                        "name": outgoing.get("name"),
+                        "position": outgoing.get("position"),
+                        "injury_status": outgoing.get("injury_status"),
+                        "projected_avg_points": outgoing.get("projected_avg_points"),
+                        "availability_factor": availability(outgoing),
+                        "scarcity_over_best_free_ppg": outgoing_scarcity,
+                        "best_free_replacement": outgoing_replacement,
+                    },
+                    "waterboys_risk_adjusted_ppg_gain": our_delta,
+                    "waterboys_expected_added_points_remaining": round(
+                        our_delta * weeks, 2
+                    ),
+                    "counterparty_risk_adjusted_ppg_gain": rival_delta,
+                    "mutually_beneficial": mutual,
+                    "acceptance_signal": acceptance,
+                    "exchange_score": round(
+                        our_delta + 0.5 * max(0.0, rival_delta),
+                        4,
+                    ),
+                })
+
+    exchanges.sort(
+        key=lambda row: (
+            row.get("mutually_beneficial") is True,
+            num(row.get("exchange_score")),
+            num(row.get("waterboys_risk_adjusted_ppg_gain")),
+        ),
+        reverse=True,
+    )
+
+    assets = []
+    for player in our_assets:
+        without = [
+            row for row in our_roster
+            if row.get("player_id") != player.get("player_id")
+        ]
+        removal_loss = round(
+            num(our_base.get("projected_ppg"))
+            - num(risk_adjusted_optimize(without, roster_cfg).get("projected_ppg")),
+            4,
+        )
+        scarcity, replacement_name = replacement(player, free_agents)
+        options = [
+            row for row in exchanges
+            if (row.get("outgoing") or {}).get("player_id") == player.get("player_id")
+        ]
+        mutual_options = [
+            row for row in options
+            if row.get("mutually_beneficial") is True
+        ]
+        best = options[0] if options else None
+        trade_before_drop = (
+            scarcity >= 2.0
+            and removal_loss <= 1.0
+            and bool(mutual_options)
+        )
+        assets.append({
+            "player_id": player.get("player_id"),
+            "name": player.get("name"),
+            "position": player.get("position"),
+            "injury_status": player.get("injury_status"),
+            "lineup_slot": player.get("lineup_slot"),
+            "risk_adjusted_lineup_loss_if_removed_ppg": removal_loss,
+            "scarcity_over_best_free_ppg": scarcity,
+            "best_free_replacement": replacement_name,
+            "mutually_beneficial_trade_count": len(mutual_options),
+            "positive_waterboys_trade_count": len(options),
+            "trade_before_drop": trade_before_drop,
+            "best_trade_return": (
+                {
+                    "source_team_id": best.get("source_team_id"),
+                    "source_team": best.get("source_team"),
+                    "incoming": best.get("incoming"),
+                    "waterboys_risk_adjusted_ppg_gain": best.get(
+                        "waterboys_risk_adjusted_ppg_gain"
+                    ),
+                    "counterparty_risk_adjusted_ppg_gain": best.get(
+                        "counterparty_risk_adjusted_ppg_gain"
+                    ),
+                    "mutually_beneficial": best.get("mutually_beneficial"),
+                }
+                if best else None
+            ),
+        })
+
+    assets.sort(
+        key=lambda row: (
+            row.get("trade_before_drop") is True,
+            int(row.get("mutually_beneficial_trade_count") or 0),
+            num(row.get("scarcity_over_best_free_ppg")),
+            -num(row.get("risk_adjusted_lineup_loss_if_removed_ppg")),
+        ),
+        reverse=True,
+    )
+    return exchanges[:100], assets
+
+
 def replacement(candidate: dict, free_agents: list[dict]) -> tuple[float, str | None]:
     pool = [
         p for p in free_agents
@@ -390,6 +605,39 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
     projected_releases.sort(key=key, reverse=True)
     trades.sort(key=key, reverse=True)
     base = optimize(list(waterboys.get("roster") or []), roster_cfg)
+    trade_exchanges, trade_assets = build_trade_exchange_board(
+        waterboys,
+        teams,
+        free_agents,
+        roster_cfg,
+        weeks,
+    )
+    trade_asset_by_id = {
+        row.get("player_id"): row
+        for row in trade_assets
+        if row.get("trade_before_drop") is True
+    }
+    for board_rows in (
+        waivers,
+        releases,
+        projected_releases,
+        trades,
+    ):
+        for row in board_rows:
+            drop = row.get("suggested_drop") or {}
+            asset = trade_asset_by_id.get(drop.get("player_id"))
+            if not asset:
+                continue
+            drop["trade_before_drop"] = True
+            drop["trade_leverage"] = {
+                "scarcity_over_best_free_ppg": asset.get(
+                    "scarcity_over_best_free_ppg"
+                ),
+                "mutually_beneficial_trade_count": asset.get(
+                    "mutually_beneficial_trade_count"
+                ),
+                "best_trade_return": asset.get("best_trade_return"),
+            }
 
     return {
         "schema": "waterboys.value_engine.v1", "status": "advisory",
@@ -402,6 +650,15 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
             "market_reference": "Observed league winning bids and processed waiver offers, preferring same-position/projection comparables.",
             "bid_guidance": "Market anchor plus a small protection margin, capped by the player-value reservation ceiling.",
             "trade_targets": "Gross acquisition value; outgoing-player cost is not included.",
+            "trade_exchange_targets": (
+                "One-for-one simulations include both the incoming and outgoing player "
+                "on WaterBoys and the counterparty roster using health-adjusted optimized PPG."
+            ),
+            "trade_assets": (
+                "Ranks current WaterBoys players by scarcity, lineup loss if removed, "
+                "and count/quality of mutually beneficial exchange paths. "
+                "trade_before_drop means preserve the asset for trade exploration before cutting."
+            ),
         },
         "waterboys_baseline": {
             "optimized_lineup_projected_ppg": base["projected_ppg"],
@@ -412,4 +669,6 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
         "elimination_watch_targets": releases[:25],
         "projected_elimination_watch_targets": projected_releases[:25],
         "trade_targets": trades[:75],
+        "trade_exchange_targets": trade_exchanges,
+        "trade_assets": trade_assets,
     }
