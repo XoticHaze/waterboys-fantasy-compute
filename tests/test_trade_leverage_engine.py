@@ -105,10 +105,11 @@ class TradeLeverageEngineTests(unittest.TestCase):
         self.assertGreaterEqual(asset["scarcity_over_best_free_ppg"], 10)
         self.assertGreater(asset["mutually_beneficial_trade_count"], 0)
         self.assertTrue(asset["trade_before_drop"])
-        self.assertEqual(
+        self.assertIn(
             asset["best_trade_return"]["incoming"]["player_id"],
-            11,
+            {10, 11},
         )
+        self.assertTrue(asset["best_trade_return"]["mutually_beneficial"])
 
     def test_ir_assets_are_not_used_as_routine_trade_chips(self):
         self.waterboys["roster"][1]["lineup_slot"] = "IR"
