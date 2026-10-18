@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from waterboys_compute.sniper import evaluate_candidate
 from waterboys_compute.value import build_trade_exchange_board
 
 
@@ -125,6 +126,91 @@ class TradeLeverageEngineTests(unittest.TestCase):
         ))
         self.assertFalse(any(item.get("player_id") == 2 for item in assets))
 
+
+    def test_sniper_preserves_trade_chip_for_non_launch_move(self):
+        snapshot = {
+            "waterboys": {
+                "team_id": 18,
+                "acquisition_budget_remaining": 900,
+                "roster": self.waterboys["roster"],
+            },
+            "league": {"roster": ROSTER_CFG},
+            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "placement_engine": {
+                "best_acquisitions": [{
+                    "player_id": 99,
+                    "acquisition_path": "waiver",
+                    "move_class": "maintenance",
+                    "estimated_rank_gain": 0,
+                }]
+            },
+        }
+        row = {
+            "player_id": 99,
+            "name": "Waiver WR",
+            "position": "WR",
+            "inputs": {
+                "availability_status": "WAIVERS",
+                "injury_status": "ACTIVE",
+                "projected_avg_points": 21,
+                "avg_points": 20,
+                "current_week_projected_points": 18,
+                "current_week_points": None,
+                "recent_form": {
+                    "games_count": 3,
+                    "median": 18,
+                    "max_single_game_share": 0.4,
+                },
+                "percent_started": 50,
+            },
+            "value": {
+                "risk_adjusted_marginal_ppg": 2,
+                "expected_added_points_remaining": 20,
+                "value_over_best_free_replacement_ppg": 10,
+            },
+            "suggested_drop": {
+                "player_id": 2,
+                "name": "Trade WR",
+                "position": "WR",
+                "projected_avg_points": 18,
+                "trade_before_drop": True,
+            },
+            "bid_guidance": {
+                "recommended": 10,
+                "reservation_ceiling": 25,
+            },
+            "market_reference": {"confidence": "high"},
+        }
+        policy = {
+            "tiers": [{
+                "name": "cheap",
+                "max_bid": 25,
+                "min_risk_adjusted_marginal_ppg": 1.5,
+                "min_expected_added_points_remaining": 15,
+            }],
+            "global_max_bid": 400,
+            "green_reserve_faab": 150,
+            "yellow_reserve_faab": 75,
+            "red_reserve_faab": 0,
+            "survival_bands": {"green_margin": 25, "yellow_margin": 12},
+            "trap_guards": {
+                "injury": {
+                    "block_statuses": ["OUT", "INJURY_RESERVE", "DOUBTFUL"],
+                },
+                "valuation": {"large_bid_threshold": 100},
+            },
+            "free_stash": {"enabled": False},
+            "growth_discipline": {"enabled": False},
+            "priority_caps": {},
+        }
+
+        evaluated = evaluate_candidate(row, snapshot, policy)
+
+        self.assertFalse(evaluated["eligible"])
+        self.assertIn(
+            "suggested_drop_has_trade_leverage",
+            evaluated["reasons"],
+        )
 
 if __name__ == "__main__":
     unittest.main()
