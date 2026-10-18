@@ -322,6 +322,14 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
 
     placement_row = _placement_row(snapshot, row.get("player_id")) or {}
     placement_move_class = placement_row.get("move_class")
+    if (
+        drop
+        and drop.get("trade_before_drop") is True
+        and not emergency
+        and placement_move_class != "launch"
+    ):
+        reasons.append("suggested_drop_has_trade_leverage")
+
     injury_cfg = ((policy.get("trap_guards") or {}).get("injury") or {})
     soft_statuses = set(
         injury_cfg.get("soft_block_statuses")
