@@ -100,10 +100,12 @@ def build_trade_exchange_board(
     our_roster = list(waterboys.get("roster") or [])
     our_id = waterboys.get("team_id")
     eligible_positions = {"QB", "RB", "WR", "TE"}
+    blocked_trade_health = {"OUT", "INJURY_RESERVE", "DOUBTFUL"}
     our_assets = [
         player for player in our_roster
         if player.get("position") in eligible_positions
         and str(player.get("lineup_slot") or "").upper() != "IR"
+        and str(player.get("injury_status") or "").upper() not in blocked_trade_health
     ]
     our_base = risk_adjusted_optimize(our_roster, roster_cfg)
     exchanges = []
@@ -118,6 +120,8 @@ def build_trade_exchange_board(
             if incoming.get("position") not in eligible_positions:
                 continue
             if str(incoming.get("lineup_slot") or "").upper() == "IR":
+                continue
+            if str(incoming.get("injury_status") or "").upper() in blocked_trade_health:
                 continue
 
             for outgoing in our_assets:
@@ -159,12 +163,12 @@ def build_trade_exchange_board(
                 outgoing_scarcity, outgoing_replacement = replacement(
                     outgoing, free_agents
                 )
-                mutual = rival_delta >= 0
+                mutual = rival_delta >= 0.25
                 acceptance = (
                     "mutual_gain"
-                    if mutual and rival_delta > 0
-                    else "rival_flat"
                     if mutual
+                    else "rival_flat"
+                    if rival_delta > -0.25
                     else "rival_concession_needed"
                 )
                 exchanges.append({

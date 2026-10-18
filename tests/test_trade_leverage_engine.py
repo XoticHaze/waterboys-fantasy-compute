@@ -112,7 +112,7 @@ class TradeLeverageEngineTests(unittest.TestCase):
         self.assertTrue(asset["best_trade_return"]["mutually_beneficial"])
 
     def test_ir_assets_are_not_used_as_routine_trade_chips(self):
-        self.waterboys["roster"][1]["lineup_slot"] = "IR"
+        self.waterboys["roster"][1]["injury_status"] = "INJURY_RESERVE"
         exchanges, assets = build_trade_exchange_board(
             self.waterboys,
             [self.waterboys, self.rival],
@@ -127,6 +127,36 @@ class TradeLeverageEngineTests(unittest.TestCase):
         ))
         self.assertFalse(any(item.get("player_id") == 2 for item in assets))
 
+
+    def test_counterparty_zero_gain_is_not_mutually_beneficial(self):
+        flat_rival = {
+            "team_id": 8,
+            "name": "Flat Rival",
+            "roster_count": 3,
+            "roster": [
+                player(20, "RB A", "RB", 18, "RB"),
+                player(21, "RB B", "RB", 18, "BE"),
+                player(22, "WR A", "WR", 18, "WR"),
+            ],
+        }
+        exchanges, _ = build_trade_exchange_board(
+            self.waterboys,
+            [self.waterboys, flat_rival],
+            self.free_agents,
+            ROSTER_CFG,
+            8,
+        )
+
+        flat = [
+            row for row in exchanges
+            if abs(row["counterparty_risk_adjusted_ppg_gain"]) < 0.25
+        ]
+        self.assertTrue(flat)
+        self.assertTrue(all(
+            row["mutually_beneficial"] is False
+            and row["acceptance_signal"] == "rival_flat"
+            for row in flat
+        ))
 
     def test_sniper_preserves_trade_chip_for_non_launch_move(self):
         snapshot = {
