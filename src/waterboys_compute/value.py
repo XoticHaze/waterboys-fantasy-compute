@@ -373,17 +373,20 @@ def percentile(values: list[int], fraction: float) -> int | None:
 
 
 def market_reference(candidate: dict, market: dict | None, waiver_offers: list[dict] | None) -> dict:
-    rows = []
-    seen = set()
+    clearing_rows = []
+    failed_demand_rows = []
+    seen_clears = set()
+    seen_failed = set()
+
     for row in (market or {}).get("successful_waiver_bids") or []:
         bid = row.get("bid")
         if not isinstance(bid, (int, float)) or bid <= 0:
             continue
         key = (row.get("player_id"), row.get("team_id"), int(bid))
-        if key in seen:
+        if key in seen_clears:
             continue
-        seen.add(key)
-        rows.append({
+        seen_clears.add(key)
+        clearing_rows.append({
             "player_id": row.get("player_id"),
             "player": row.get("player"),
             "position": row.get("position"),
@@ -395,43 +398,63 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
     for row in waiver_offers or []:
         bid = row.get("bid")
         result = str(row.get("result") or "").upper()
-        if (
-            not isinstance(bid, (int, float))
-            or bid <= 0
-            or any(marker in result for marker in ("PENDING", "CANCELED", "CANCELLED"))
-        ):
+        if not isinstance(bid, (int, float)) or bid <= 0:
             continue
         key = (row.get("player_id"), row.get("team_id"), int(bid))
-        if key in seen:
+
+        if result == "EXECUTED":
+            if key in seen_clears:
+                continue
+            seen_clears.add(key)
+            clearing_rows.append({
+                "player_id": row.get("player_id"),
+                "player": row.get("player"),
+                "position": row.get("position"),
+                "projected_avg_points": row.get("projected_avg_points"),
+                "bid": int(bid),
+                "kind": "executed_offer",
+            })
             continue
-        seen.add(key)
-        rows.append({
-            "player_id": row.get("player_id"),
-            "player": row.get("player"),
-            "position": row.get("position"),
-            "projected_avg_points": row.get("projected_avg_points"),
-            "bid": int(bid),
-            "kind": "processed_offer",
-        })
+
+        if result.startswith("FAILED_"):
+            if key in seen_failed:
+                continue
+            seen_failed.add(key)
+            failed_demand_rows.append({
+                "player_id": row.get("player_id"),
+                "player": row.get("player"),
+                "position": row.get("position"),
+                "projected_avg_points": row.get("projected_avg_points"),
+                "bid": int(bid),
+                "result": result,
+                "kind": "failed_demand_signal",
+            })
 
     candidate_pos = candidate.get("position")
     candidate_proj = num(candidate.get("projected_avg_points"))
-    same_position = [row for row in rows if row.get("position") == candidate_pos]
-    comparable = [
-        row for row in same_position
-        if isinstance(row.get("projected_avg_points"), (int, float))
-        and abs(float(row["projected_avg_points"]) - candidate_proj) <= max(4.0, candidate_proj * 0.30)
-    ]
-    sample = comparable or same_position or rows
+
+    def comparable_sample(rows: list[dict]) -> tuple[list[dict], str]:
+        same_position = [row for row in rows if row.get("position") == candidate_pos]
+        comparable = [
+            row for row in same_position
+            if isinstance(row.get("projected_avg_points"), (int, float))
+            and abs(float(row["projected_avg_points"]) - candidate_proj)
+            <= max(4.0, candidate_proj * 0.30)
+        ]
+        if comparable:
+            return comparable, "same_position_similar_projection"
+        if same_position:
+            return same_position, "same_position"
+        return rows, "all_observed_clears"
+
+    sample, sample_basis = comparable_sample(clearing_rows)
+    failed_sample, failed_basis = comparable_sample(failed_demand_rows)
     bids = [row["bid"] for row in sample]
+    failed_bids = [row["bid"] for row in failed_sample]
     confidence = "high" if len(sample) >= 6 else "medium" if len(sample) >= 3 else "low"
 
     return {
-        "sample_basis": (
-            "same_position_similar_projection" if comparable
-            else "same_position" if same_position
-            else "all_observed_winners_and_processed_offers"
-        ),
+        "sample_basis": sample_basis,
         "sample_size": len(sample),
         "confidence": confidence,
         "median": percentile(bids, 0.50),
@@ -439,8 +462,64 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
         "p90": percentile(bids, 0.90),
         "max": max(bids) if bids else None,
         "recent_comparables": sorted(sample, key=lambda row: row["bid"], reverse=True)[:5],
+        "failed_demand": {
+            "sample_basis": failed_basis,
+            "sample_size": len(failed_sample),
+            "median": percentile(failed_bids, 0.50),
+            "p75": percentile(failed_bids, 0.75),
+            "max": max(failed_bids) if failed_bids else None,
+            "recent_signals": sorted(
+                failed_sample,
+                key=lambda row: row["bid"],
+                reverse=True,
+            )[:5],
+            "clearing_price_eligible": False,
+        },
     }
 
+
+def budget_competition(
+    market: dict | None,
+    waterboys_team_id: int | None,
+    source_team_id: int | None,
+    target_bid: int,
+    waterboys_budget: int,
+) -> dict:
+    competitors = []
+    for row in (market or {}).get("budget_leaderboard") or []:
+        team_id = row.get("team_id")
+        if team_id in {waterboys_team_id, source_team_id}:
+            continue
+        remaining = row.get("remaining")
+        if not isinstance(remaining, (int, float)):
+            continue
+        competitors.append({
+            "team_id": team_id,
+            "name": row.get("name"),
+            "remaining": int(remaining),
+        })
+
+    competitors.sort(key=lambda row: row["remaining"], reverse=True)
+    capable = [
+        row for row in competitors
+        if row["remaining"] >= max(1, int(target_bid or 0))
+    ]
+    above_us = [
+        row for row in competitors
+        if row["remaining"] > int(waterboys_budget or 0)
+    ]
+    budgets = [row["remaining"] for row in competitors]
+
+    return {
+        "waterboys_budget": int(waterboys_budget or 0),
+        "competitor_count": len(competitors),
+        "competitors_capable_at_target_bid": len(capable),
+        "competitors_with_more_faab_than_waterboys": len(above_us),
+        "top_competitor_budget": budgets[0] if budgets else None,
+        "median_competitor_budget": percentile(budgets, 0.50),
+        "top_capable_competitors": capable[:5],
+        "budget_rank_if_all_bid": 1 + len(above_us),
+    }
 
 def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta: float, budget: int) -> dict:
     if not value_reference.get("applicable"):
@@ -449,12 +528,16 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
     ceiling = int(value_reference.get("high") or value_reference.get("midpoint") or 0)
     observed = int(market_ref.get("sample_size") or 0)
     if observed <= 0:
+        recommended = int(value_reference.get("midpoint") or 0)
         return {
             "applicable": True,
             "confidence": "unpriced",
-            "recommended": int(value_reference.get("midpoint") or 0),
+            "recommended": recommended,
             "reservation_ceiling": ceiling,
-            "reason": "No comparable league clearing-price sample yet; use value reference cautiously.",
+            "market_posture": "unpriced_value_only",
+            "expected_to_clear_reference": None,
+            "clearing_range": None,
+            "reason": "No verified clearing-price comparables yet; use intrinsic value reference only.",
         }
 
     median = int(market_ref.get("median") or 0)
@@ -462,7 +545,18 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
     p90 = int(market_ref.get("p90") or p75)
     anchor = p90 if risk_delta >= 10 else p75 if risk_delta >= 3 else median
     protection = max(1, int(round(max(1, budget) * 0.005)))
-    recommended = min(ceiling, max(1, anchor + protection))
+    target_to_clear = max(1, anchor + protection)
+    recommended = min(ceiling, target_to_clear)
+    value_edge = ceiling - anchor
+
+    if ceiling >= p90 + protection and risk_delta >= 3:
+        posture = "strong_value_edge"
+    elif ceiling >= target_to_clear:
+        posture = "contested_but_affordable"
+    elif ceiling >= median:
+        posture = "price_sensitive"
+    else:
+        posture = "do_not_chase"
 
     return {
         "applicable": True,
@@ -471,7 +565,19 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
         "reservation_ceiling": ceiling,
         "market_anchor": anchor,
         "protection_margin": protection,
-        "reason": "Recommended bid is market-clearing estimate plus protection, capped by player-value reservation ceiling.",
+        "target_to_clear_reference": target_to_clear,
+        "expected_to_clear_reference": ceiling >= target_to_clear,
+        "market_value_edge_faab": value_edge,
+        "market_posture": posture,
+        "clearing_range": {
+            "median": median,
+            "likely": p75,
+            "high": p90,
+        },
+        "reason": (
+            "Recommendation targets verified league clearing prices plus protection, "
+            "never exceeding WaterBoys intrinsic reservation value."
+        ),
     }
 
 
@@ -530,6 +636,27 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
     result["bid_guidance"] = calibrated_bid_guidance(
         result["faab_reference"], market_ref, risk, budget
     )
+    result["faab_market_intelligence"] = {
+        "clearing_price_reference": {
+            "sample_size": market_ref.get("sample_size"),
+            "confidence": market_ref.get("confidence"),
+            "median": market_ref.get("median"),
+            "p75": market_ref.get("p75"),
+            "p90": market_ref.get("p90"),
+        },
+        "failed_demand_pressure": market_ref.get("failed_demand"),
+        "budget_competition": budget_competition(
+            market,
+            waterboys.get("team_id"),
+            source_team.get("team_id") if source_team else None,
+            int((result.get("bid_guidance") or {}).get("recommended") or 0),
+            budget,
+        ),
+        "market_posture": (result.get("bid_guidance") or {}).get("market_posture"),
+        "expected_to_clear_reference": (
+            result.get("bid_guidance") or {}
+        ).get("expected_to_clear_reference"),
+    }
     bid = result["faab_reference"]
     if bid.get("applicable") and int(bid.get("midpoint") or 0) > 0:
         midpoint = int(bid["midpoint"])
@@ -651,8 +778,18 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
             "replacement_value": "Candidate projection minus best free alternative at the same position.",
             "health_factors": HEALTH,
             "faab_reference": "Player-value reservation range; not a clearing-price estimate.",
-            "market_reference": "Observed league winning bids and processed waiver offers, preferring same-position/projection comparables.",
-            "bid_guidance": "Market anchor plus a small protection margin, capped by the player-value reservation ceiling.",
+            "market_reference": (
+                "Verified successful/executed waiver clears only. Failed offers are kept "
+                "separately as demand-pressure signals and never count as clearing prices."
+            ),
+            "bid_guidance": (
+                "Verified clearing-price anchor plus protection, capped by intrinsic "
+                "WaterBoys reservation value, with explicit market posture."
+            ),
+            "faab_market_intelligence": (
+                "Combines verified clearing prices, non-clearing failed-demand pressure, "
+                "and current competitor budget capacity."
+            ),
             "trade_targets": "Gross acquisition value; outgoing-player cost is not included.",
             "trade_exchange_targets": (
                 "One-for-one simulations include both the incoming and outgoing player "
