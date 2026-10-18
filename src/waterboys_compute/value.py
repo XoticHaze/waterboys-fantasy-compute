@@ -605,6 +605,13 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
     projected_releases.sort(key=key, reverse=True)
     trades.sort(key=key, reverse=True)
     base = optimize(list(waterboys.get("roster") or []), roster_cfg)
+    trade_exchanges, trade_assets = build_trade_exchange_board(
+        waterboys,
+        teams,
+        free_agents,
+        roster_cfg,
+        weeks,
+    )
 
     return {
         "schema": "waterboys.value_engine.v1", "status": "advisory",
@@ -617,6 +624,15 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
             "market_reference": "Observed league winning bids and processed waiver offers, preferring same-position/projection comparables.",
             "bid_guidance": "Market anchor plus a small protection margin, capped by the player-value reservation ceiling.",
             "trade_targets": "Gross acquisition value; outgoing-player cost is not included.",
+            "trade_exchange_targets": (
+                "One-for-one simulations include both the incoming and outgoing player "
+                "on WaterBoys and the counterparty roster using health-adjusted optimized PPG."
+            ),
+            "trade_assets": (
+                "Ranks current WaterBoys players by scarcity, lineup loss if removed, "
+                "and count/quality of mutually beneficial exchange paths. "
+                "trade_before_drop means preserve the asset for trade exploration before cutting."
+            ),
         },
         "waterboys_baseline": {
             "optimized_lineup_projected_ppg": base["projected_ppg"],
@@ -627,4 +643,6 @@ def build_value_engine(waterboys: dict, teams: list[dict], free_agents: list[dic
         "elimination_watch_targets": releases[:25],
         "projected_elimination_watch_targets": projected_releases[:25],
         "trade_targets": trades[:75],
+        "trade_exchange_targets": trade_exchanges,
+        "trade_assets": trade_assets,
     }
