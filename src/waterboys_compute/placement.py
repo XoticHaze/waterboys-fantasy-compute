@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from .value import FLEX, availability, num, optimize as optimize_durable, score_candidate, slot_counts
+from .value import (
+    FLEX,
+    availability,
+    budget_competition,
+    num,
+    optimize as optimize_durable,
+    score_candidate,
+    slot_counts,
+)
 
 
 STARTER_SLOTS = {"QB", "RB", "WR", "TE", "RB/WR/TE", "FLEX", "D/ST", "K"}
@@ -282,6 +290,82 @@ def elimination_race(teams: list[dict], survival: dict, *, danger_points: float 
         -(int(row.get("projection_rank") or 0)),
     ))
     return rows
+
+
+def elimination_forecast(teams: list[dict], survival: dict) -> dict:
+    ranking = [
+        row for row in (survival.get("current_week_ranking") or [])
+        if isinstance(row.get("projected_points"), (int, float))
+    ]
+    if not ranking:
+        return {
+            "method": "relative_projected_elimination_risk",
+            "not_calibrated_probability": True,
+            "teams": [],
+        }
+
+    lowest_projection = min(float(row["projected_points"]) for row in ranking)
+    alive = max(1, int(survival.get("alive_team_count") or len(ranking)))
+    team_by_id = _team_lookup(teams)
+
+    raw_rows = []
+    for row in ranking:
+        projected = float(row["projected_points"])
+        gap = max(0.0, projected - lowest_projection)
+        # A smooth relative danger curve. This is deliberately a forecast weight,
+        # not a claimed statistical elimination probability.
+        raw_weight = 1.0 / (1.0 + (gap / 18.0) ** 2)
+        projected_rank = int(row.get("projection_rank") or alive)
+        if projected_rank == alive:
+            tier = "projected_favorite"
+        elif gap <= 12:
+            tier = "high_risk"
+        elif gap <= 25:
+            tier = "live_contender"
+        elif gap <= 45:
+            tier = "monitor"
+        else:
+            tier = "remote"
+
+        team = team_by_id.get(row.get("team_id")) or {}
+        raw_rows.append({
+            "team_id": row.get("team_id"),
+            "name": row.get("name"),
+            "actual_points": row.get("points"),
+            "actual_rank": row.get("rank"),
+            "projected_points": projected,
+            "projection_rank": projected_rank,
+            "gap_above_projected_low": round(gap, 4),
+            "raw_risk_weight": raw_weight,
+            "forecast_tier": tier,
+            "faab_remaining": team.get("acquisition_budget_remaining"),
+            "roster_release_watch": _release_assets(team),
+        })
+
+    total = sum(num(row.get("raw_risk_weight")) for row in raw_rows) or 1.0
+    for row in raw_rows:
+        row["relative_elimination_risk_share"] = round(
+            num(row.get("raw_risk_weight")) / total,
+            4,
+        )
+        row.pop("raw_risk_weight", None)
+
+    raw_rows.sort(
+        key=lambda row: (
+            num(row.get("relative_elimination_risk_share")),
+            -num(row.get("projected_points")),
+        ),
+        reverse=True,
+    )
+    return {
+        "method": (
+            "Relative risk weighting from current ESPN projected totals. "
+            "Weights rank likely release pools for preparation; they are not calibrated probabilities."
+        ),
+        "not_calibrated_probability": True,
+        "projected_low": round(lowest_projection, 4),
+        "teams": raw_rows,
+    }
 
 
 def _slot_accepts(position: str, slot: str) -> bool:
@@ -684,6 +768,11 @@ def build_placement_engine(
         row.get("team_id") for row in race
         if row.get("team_id") != waterboys.get("team_id")
     }
+    elimination_projection = elimination_forecast(teams, survival)
+    elimination_by_team = {
+        row.get("team_id"): row
+        for row in (elimination_projection.get("teams") or [])
+    }
 
     current_week = int(league_cfg.get("current_week") or 0)
     weeks = max(0, int(settings.get("regular_season_count") or current_week) - current_week)
@@ -721,6 +810,93 @@ def build_placement_engine(
         ),
         reverse=True,
     )
+
+    forecast_release_board = []
+    preparation_teams = [
+        row for row in (elimination_projection.get("teams") or [])
+        if row.get("team_id") != waterboys.get("team_id")
+    ][:5]
+    preparation_ids = {row.get("team_id") for row in preparation_teams}
+    for team in teams:
+        if team.get("team_id") not in preparation_ids:
+            continue
+        forecast_row = elimination_by_team.get(team.get("team_id")) or {}
+        risk_share = num(forecast_row.get("relative_elimination_risk_share"))
+        for player in team.get("roster") or []:
+            if player.get("position") not in {"QB", "RB", "WR", "TE", "D/ST", "K"}:
+                continue
+            scored = score_candidate(
+                player,
+                "elimination_forecast",
+                waterboys,
+                free_agents,
+                roster_cfg,
+                weeks,
+                budget,
+                team,
+                market=market,
+                waiver_offers=waiver_offers,
+            )
+            durable_ppg = num(
+                (scored.get("value") or {}).get("risk_adjusted_marginal_ppg")
+            )
+            remaining_value = num(
+                (scored.get("value") or {}).get("expected_added_points_remaining")
+            )
+            forecast_release_board.append({
+                "player_id": scored.get("player_id"),
+                "name": scored.get("name"),
+                "position": scored.get("position"),
+                "injury_status": (scored.get("inputs") or {}).get("injury_status"),
+                "source_team_id": team.get("team_id"),
+                "source_team": team.get("name"),
+                "source_forecast_tier": forecast_row.get("forecast_tier"),
+                "source_relative_elimination_risk_share": risk_share,
+                "source_projected_points": forecast_row.get("projected_points"),
+                "source_projection_rank": forecast_row.get("projection_rank"),
+                "durable_risk_adjusted_marginal_ppg": durable_ppg,
+                "expected_added_points_remaining": remaining_value,
+                "forecast_weighted_remaining_value": round(
+                    risk_share * max(0.0, remaining_value),
+                    4,
+                ),
+                "suggested_drop": scored.get("suggested_drop"),
+                "faab_reference": scored.get("faab_reference"),
+                "bid_guidance": scored.get("bid_guidance"),
+                "faab_market_intelligence": scored.get("faab_market_intelligence"),
+            })
+
+    forecast_release_board.sort(
+        key=lambda row: (
+            num(row.get("forecast_weighted_remaining_value")),
+            num(row.get("durable_risk_adjusted_marginal_ppg")),
+            num(row.get("source_relative_elimination_risk_share")),
+        ),
+        reverse=True,
+    )
+
+    for forecast_team in preparation_teams:
+        forecast_team["priority_release_targets"] = [
+            {
+                "player_id": row.get("player_id"),
+                "name": row.get("name"),
+                "position": row.get("position"),
+                "durable_risk_adjusted_marginal_ppg": row.get(
+                    "durable_risk_adjusted_marginal_ppg"
+                ),
+                "recommended_bid": (
+                    row.get("bid_guidance") or {}
+                ).get("recommended"),
+                "reservation_ceiling": (
+                    row.get("bid_guidance") or {}
+                ).get("reservation_ceiling"),
+                "market_posture": (
+                    row.get("bid_guidance") or {}
+                ).get("market_posture"),
+            }
+            for row in forecast_release_board
+            if row.get("source_team_id") == forecast_team.get("team_id")
+        ][:5]
 
     player_by_id = _player_lookup(teams, free_agents)
 
@@ -911,6 +1087,18 @@ def build_placement_engine(
     else:
         pressure = "green"
 
+    faab_market_state = budget_competition(
+        market,
+        waterboys.get("team_id"),
+        None,
+        1,
+        budget,
+    )
+    faab_market_state["waterboys_available_faab"] = budget
+    faab_market_state["active_budget_leaderboard"] = (
+        (market or {}).get("budget_leaderboard") or []
+    )
+
     return {
         "schema": "waterboys.placement_engine.v1",
         "status": "advisory",
@@ -938,6 +1126,12 @@ def build_placement_engine(
             "optimized_lineup": base_weekly.get("players"),
         },
         "elimination_race": race,
+        "elimination_pool_forecast": {
+            **elimination_projection,
+            "teams": preparation_teams,
+            "release_board": forecast_release_board[:75],
+        },
+        "faab_market_state": faab_market_state,
         "future_elimination_targets": future_release_rows[:50],
         "best_acquisitions": board[:50],
         "weekly_rank_up_targets": weekly_board[:30],
@@ -956,6 +1150,15 @@ def build_placement_engine(
             "future_elimination": (
                 "Scores assets on every team within 25 projected points of the current "
                 "elimination cutline, not only the single last-place team."
+            ),
+            "elimination_pool_forecast": (
+                "Ranks the five most likely release pools using a relative projection-risk "
+                "weight, then risk-weights WaterBoys value for each possible released player. "
+                "Risk shares are preparation weights, not calibrated probabilities."
+            ),
+            "faab_market_state": (
+                "Shows WaterBoys budget rank and competitor capacity; candidate rows use "
+                "verified clearing prices separately from failed-demand pressure."
             ),
             "rank_after_move": (
                 "Uses risk-adjusted current-week marginal lineup points where player weekly "
