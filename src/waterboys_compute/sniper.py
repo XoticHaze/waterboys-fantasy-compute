@@ -385,7 +385,12 @@ def evaluate_candidate(row: dict, snapshot: dict, policy: dict, previous_report:
 
     guards = policy.get("trap_guards") or {}
     large_threshold = int((guards.get("valuation") or {}).get("large_bid_threshold") or 100)
-    if availability == "WAIVERS" and hard_cap >= large_threshold:
+    large_bid_intent = (
+        min(max(1, recommended), hard_cap)
+        if availability == "WAIVERS" and hard_cap > 0
+        else 0
+    )
+    if availability == "WAIVERS" and large_bid_intent >= large_threshold:
         if injury == "QUESTIONABLE":
             reasons.append("questionable_blocks_large_bid")
         if int(recent.get("games_count") or 0) < int((guards.get("recent_form") or {}).get("min_games_for_large_bid") or 2):
