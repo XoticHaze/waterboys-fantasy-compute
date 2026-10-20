@@ -1,0 +1,55 @@
+name: Shared NVIDIA Cloudflare Read-Only Preflight
+
+# Reuses the existing ordinary compute account and legacy WaterBoys identity.
+# No NVIDIA key in GitHub; never creates/deploys Workers or edits any secrets.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/shared-nvidia-cloudflare-readonly-preflight.yml'
+      - 'scripts/shared_nvidia_cf_preflight.py'
+      - 'tests/test_shared_nvidia_cf_preflight.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-nvidia-cloudflare-readonly-preflight
+  cancel-in-progress: false
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify fixed GET-only probe and redaction contracts
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_shared_nvidia_cf_preflight.py' -v
+          python -m py_compile scripts/shared_nvidia_cf_preflight.py
+
+  cloud-readonly:
+    needs: offline-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Read only existing ordinary account and Secrets Store metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/shared_nvidia_cf_preflight.py | tee "$RUNNER_TEMP/shared-nvidia-cf-readonly.json"
+          test -s "$RUNNER_TEMP/shared-nvidia-cf-readonly.json"
+      - name: Preserve sanitized stage classification
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-nvidia-cf-readonly-preflight
+          path: ${{ runner.temp }}/shared-nvidia-cf-readonly.json
+          retention-days: 7
+          if-no-files-found: error
