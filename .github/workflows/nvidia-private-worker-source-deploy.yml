@@ -1,0 +1,100 @@
+name: NVIDIA Private Worker Source Deploy (existing compute identity)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/nvidia-private-worker-source-deploy.yml"
+permissions:
+  contents: read
+concurrency:
+  group: nvidia-private-worker-source-deploy
+  cancel-in-progress: false
+jobs:
+  deploy-reviewed-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout pinned reviewed NVIDIA source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 1cd9cdf3839bca98c74d3b75d153bddc1a05543a
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Verify reviewed source and disabled public routes
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1cd9cdf3839bca98c74d3b75d153bddc1a05543a"
+          npm test
+          node --check src/index.js
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const c = JSON.parse(fs.readFileSync('wrangler.jsonc','utf8'));
+          assert.equal(c.name,'cc-shared-nvidia-inference');
+          assert.equal(c.main,'src/index.js');
+          assert.equal(c.workers_dev,false);
+          assert.equal(c.preview_urls,false);
+          assert.equal(c.vars?.CC_NVIDIA_DIAGNOSTIC_ENABLED,'0');
+          for (const key of ['route','routes','services','secrets_store_secrets','triggers']) {
+            assert.equal(c[key],undefined);
+          }
+          console.log('NVIDIA_PRIVATE_CONFIG=PASS');
+          JS
+      - name: Confirm target exists in ordinary account
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,re
+          from urllib.request import Request,urlopen
+          a=os.environ.get('CLOUDFLARE_ACCOUNT_ID','')
+          t=os.environ.get('CLOUDFLARE_API_TOKEN','')
+          if not re.fullmatch(r'[0-9a-fA-F]{32}',a) or not t:
+              raise SystemExit('DEPLOY_IDENTITY_MISSING')
+          def status(name):
+              u='https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/'+name+'/settings'
+              with urlopen(Request(u,headers={'Authorization':'Bearer '+t,'Accept':'application/json'}),timeout=15) as r:
+                  return r.status
+          if status('waterboys-fantasy-broker')!=200 or status('cc-shared-nvidia-inference')!=200:
+              raise SystemExit('EXISTING_ORDINARY_TARGET_UNVERIFIED')
+          print('ORDINARY_COMPUTE_AND_EXISTING_NVIDIA_WORKER=PASS')
+          PY
+      - name: Deploy reviewed private Worker source without a secret binding
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.135.0 deploy --config wrangler.jsonc > "$RUNNER_TEMP/nvidia-deploy.log" 2>&1 || {
+            echo 'NVIDIA_SOURCE_DEPLOY=REJECTED_OR_FAILED'
+            exit 1
+          }
+          echo 'NVIDIA_SOURCE_DEPLOY=PASS'
+          echo 'NVIDIA_SECRET_BINDING_ADDED=NO'
+          echo 'NVIDIA_INFERENCE_EXECUTED=NO'
+      - name: Verify deployed settings without reading secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from urllib.request import Request,urlopen
+          a=os.environ['CLOUDFLARE_ACCOUNT_ID'];t=os.environ['CLOUDFLARE_API_TOKEN']
+          u='https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/cc-shared-nvidia-inference/settings'
+          with urlopen(Request(u,headers={'Authorization':'Bearer '+t,'Accept':'application/json'}),timeout=15) as r:
+              d=json.load(r)
+          if d.get('success') is not True: raise SystemExit('POST_DEPLOY_READBACK_FAILED')
+          bindings=(d.get('result') or {}).get('bindings') or []
+          names={x.get('name') for x in bindings if isinstance(x,dict)}
+          if 'CC_NVIDIA_DIAGNOSTIC_ENABLED' not in names:
+              raise SystemExit('DISABLED_DIAGNOSTIC_VAR_MISSING')
+          print('NVIDIA_WORKER_SETTINGS_READBACK=PASS')
+          print('NVIDIA_SECRET_BOUND=' + str('NVIDIA_API_KEY' in names).lower())
+          print('NVIDIA_PROVIDER_INFERENCE_VERIFIED=false')
+          PY
