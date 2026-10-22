@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "snapshot",
-  "nonce": "2026-10-22-brief-intelligence-pr19-79886eaa",
-  "reason": "Verify production brief includes elimination_pool_forecast, faab_market_state, and candidate FAAB intelligence after PR 19 deployment"
+  "nonce": "2026-10-22-premium-auction-intelligence-pr20-60464721",
+  "reason": "Post-merge verify verified premium-auction market stress and rival capacity on the five-team Week 7 release board"
 }
