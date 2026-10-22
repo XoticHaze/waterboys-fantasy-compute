@@ -594,7 +594,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("function buildBrief(snapshot, runId, stateCommit)", worker)
         self.assertIn("'state/brief.json'", worker)
         self.assertIn("waterboys.brief.v1", worker)
-        self.assertIn("market_reference: row && row.market_reference", worker)
+        self.assertIn("market_reference: compactMarket(row && row.market_reference)", worker)
         self.assertIn("bid_guidance: row && row.bid_guidance", worker)
         self.assertIn("diagnostics: snapshot.diagnostics || {}", worker)
         self.assertIn("placement_engine:", worker)
