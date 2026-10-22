@@ -389,6 +389,7 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
         clearing_rows.append({
             "player_id": row.get("player_id"),
             "player": row.get("player"),
+            "team_id": row.get("team_id"),
             "position": row.get("position"),
             "projected_avg_points": row.get("projected_avg_points"),
             "bid": int(bid),
@@ -409,6 +410,7 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
             clearing_rows.append({
                 "player_id": row.get("player_id"),
                 "player": row.get("player"),
+                "team_id": row.get("team_id"),
                 "position": row.get("position"),
                 "projected_avg_points": row.get("projected_avg_points"),
                 "bid": int(bid),
@@ -453,6 +455,58 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
     failed_bids = [row["bid"] for row in failed_sample]
     confidence = "high" if len(sample) >= 6 else "medium" if len(sample) >= 3 else "low"
 
+    # Premium assets can attract bids far above ordinary same-position clears.
+    # Report separately from the bid estimator. Do NOT inflate a player's
+    # reservation ceiling or teach the live sniper to chase outlier purchases.
+    rank = candidate.get("positional_rank")
+    started = num(candidate.get("percent_started"))
+    is_premium = candidate_pos in {"RB", "WR", "TE"} and (
+        started >= 70 or (
+            isinstance(rank, (int, float)) and 1 <= rank <= 12
+        )
+    )
+    premium_clears = []
+    same_position_premium = []
+    if is_premium and candidate_proj > 0:
+        projection_floors = {"RB": 18.0, "WR": 20.0, "TE": 14.0}
+        for row in clearing_rows:
+            position = row.get("position")
+            projection = num(row.get("projected_avg_points"))
+            # Do not confuse the $250 very-low-projection RB clear with
+            # evidence that elite RBs themselves reliably command $250.
+            if (
+                position not in projection_floors
+                or projection < projection_floors[position]
+                or row["bid"] < 100
+            ):
+                continue
+            premium_clears.append(row)
+            if (
+                position == candidate_pos
+                and projection >= candidate_proj * 0.55
+            ):
+                same_position_premium.append(row)
+
+    premium_auction_stress = {
+        "premium_candidate": bool(is_premium),
+        "verified_same_position_premium_clears": len(same_position_premium),
+        "same_position_winning_bids": sorted(
+            same_position_premium, key=lambda row: row["bid"], reverse=True
+        )[:5],
+        "highest_verified_same_position_bid": max(
+            (row["bid"] for row in same_position_premium), default=None
+        ),
+        "verified_cross_position_premium_clears": len(premium_clears),
+        "cross_position_winning_bids": sorted(
+            premium_clears, key=lambda row: row["bid"], reverse=True
+        )[:6],
+        "scope": (
+            "Observed high-bid winning transactions from established projected "
+            "RB/WR/TE performers, for auction stress testing only. Neither "
+            "cross-position prices nor a single prior clear predicts a winning bid."
+        ),
+    }
+
     return {
         "sample_basis": sample_basis,
         "sample_size": len(sample),
@@ -462,6 +516,7 @@ def market_reference(candidate: dict, market: dict | None, waiver_offers: list[d
         "p90": percentile(bids, 0.90),
         "max": max(bids) if bids else None,
         "recent_comparables": sorted(sample, key=lambda row: row["bid"], reverse=True)[:5],
+        "premium_auction_stress": premium_auction_stress,
         "failed_demand": {
             "sample_basis": failed_basis,
             "sample_size": len(failed_sample),
@@ -526,6 +581,10 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
     if not value_reference.get("applicable"):
         return {"applicable": False, "reason": value_reference.get("reason")}
 
+    premium = market_ref.get("premium_auction_stress") or {}
+    is_premium = premium.get("premium_candidate") is True
+    premium_clears = int(premium.get("verified_same_position_premium_clears") or 0)
+    stress_bid = premium.get("highest_verified_same_position_bid")
     ceiling = int(value_reference.get("high") or value_reference.get("midpoint") or 0)
     observed = int(market_ref.get("sample_size") or 0)
     if observed <= 0:
@@ -535,8 +594,12 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
             "confidence": "unpriced",
             "recommended": recommended,
             "reservation_ceiling": ceiling,
-            "market_posture": "unpriced_value_only",
+            "market_posture": "premium_auction_uncertain" if is_premium else "unpriced_value_only",
             "expected_to_clear_reference": None,
+            "premium_auction_warning": is_premium,
+            "historical_premium_bid_above_reservation": (
+                stress_bid > ceiling if isinstance(stress_bid, (int, float)) else None
+            ),
             "clearing_range": None,
             "reason": "No verified clearing-price comparables yet; use intrinsic value reference only.",
         }
@@ -559,6 +622,12 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
     else:
         posture = "do_not_chase"
 
+    # With fewer than 3 verified premium peers, ordinary $1-$50 waivers
+    # cannot support any claim that this bid is likely to clear for a star.
+    uncertain_premium = is_premium and premium_clears < 3
+    if uncertain_premium:
+        posture = "premium_auction_uncertain"
+
     return {
         "applicable": True,
         "confidence": market_ref.get("confidence"),
@@ -567,7 +636,13 @@ def calibrated_bid_guidance(value_reference: dict, market_ref: dict, risk_delta:
         "market_anchor": anchor,
         "protection_margin": protection,
         "target_to_clear_reference": target_to_clear,
-        "expected_to_clear_reference": ceiling >= target_to_clear,
+        "expected_to_clear_reference": (
+            None if uncertain_premium else ceiling >= target_to_clear
+        ),
+        "premium_auction_warning": uncertain_premium,
+        "historical_premium_bid_above_reservation": (
+            stress_bid > ceiling if isinstance(stress_bid, (int, float)) else None
+        ),
         "market_value_edge_faab": value_edge,
         "market_posture": posture,
         "clearing_range": {
@@ -646,6 +721,22 @@ def score_candidate(candidate: dict, source: str, waterboys: dict, free_agents: 
             "p90": market_ref.get("p90"),
         },
         "failed_demand_pressure": market_ref.get("failed_demand"),
+        "premium_auction_stress": market_ref.get("premium_auction_stress"),
+        "budget_competition_at_premium_price": (
+            budget_competition(
+                market,
+                waterboys.get("team_id"),
+                source_team.get("team_id") if source_team else None,
+                int((market_ref.get("premium_auction_stress") or {}).get(
+                    "highest_verified_same_position_bid"
+                ) or 0),
+                budget,
+            )
+            if (market_ref.get("premium_auction_stress") or {}).get(
+                "highest_verified_same_position_bid"
+            ) is not None
+            else None
+        ),
         "budget_competition": budget_competition(
             market,
             waterboys.get("team_id"),
