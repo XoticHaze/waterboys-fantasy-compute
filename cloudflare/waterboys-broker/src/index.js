@@ -312,6 +312,7 @@ function buildBrief(snapshot, runId, stateCommit) {
     faab_reference: row && row.faab_reference,
     market_reference: row && row.market_reference,
     bid_guidance: row && row.bid_guidance,
+    faab_market_intelligence: row && row.faab_market_intelligence,
     cost_efficiency: row && row.cost_efficiency,
   });
 
@@ -391,6 +392,39 @@ function buildBrief(snapshot, runId, stateCommit) {
       current: placement.current,
       lineup_optimizer: placement.lineup_optimizer,
       elimination_race: placement.elimination_race || [],
+      elimination_pool_forecast: {
+        method: (placement.elimination_pool_forecast || {}).method,
+        not_calibrated_probability: (placement.elimination_pool_forecast || {}).not_calibrated_probability,
+        projected_low: (placement.elimination_pool_forecast || {}).projected_low,
+        teams: ((placement.elimination_pool_forecast || {}).teams || []).slice(0, 5).map((team) => ({
+          team_id: team.team_id,
+          name: team.name,
+          projected_points: team.projected_points,
+          projection_rank: team.projection_rank,
+          gap_above_projected_low: team.gap_above_projected_low,
+          relative_elimination_risk_share: team.relative_elimination_risk_share,
+          forecast_tier: team.forecast_tier,
+          faab_remaining: team.faab_remaining,
+          priority_release_targets: (team.priority_release_targets || []).slice(0, 5),
+        })),
+        release_board: ((placement.elimination_pool_forecast || {}).release_board || []).slice(0, 25).map((row) => ({
+          player_id: row.player_id,
+          name: row.name,
+          position: row.position,
+          injury_status: row.injury_status,
+          source_team_id: row.source_team_id,
+          source_team: row.source_team,
+          source_forecast_tier: row.source_forecast_tier,
+          source_relative_elimination_risk_share: row.source_relative_elimination_risk_share,
+          durable_risk_adjusted_marginal_ppg: row.durable_risk_adjusted_marginal_ppg,
+          expected_added_points_remaining: row.expected_added_points_remaining,
+          forecast_weighted_remaining_value: row.forecast_weighted_remaining_value,
+          suggested_drop: row.suggested_drop,
+          bid_guidance: row.bid_guidance,
+          faab_market_intelligence: row.faab_market_intelligence,
+        })),
+      },
+      faab_market_state: placement.faab_market_state || {},
       best_acquisitions: (placement.best_acquisitions || []).slice(0, 30),
       weekly_rank_up_targets: (placement.weekly_rank_up_targets || []).slice(0, 20),
       durable_rank_up_targets: (placement.durable_rank_up_targets || []).slice(0, 20),
@@ -403,6 +437,8 @@ function buildBrief(snapshot, runId, stateCommit) {
     privacy: snapshot.privacy || {},
   };
 }
+
+export { buildBrief };
 
 export default {
   async fetch(request, env) {
