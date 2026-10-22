@@ -300,6 +300,52 @@ function buildBrief(snapshot, runId, stateCommit) {
   const value = snapshot.value_engine || {};
   const placement = snapshot.placement_engine || {};
 
+  const compactMarket = (market) => market ? ({
+    sample_basis: market.sample_basis,
+    sample_size: market.sample_size,
+    confidence: market.confidence,
+    median: market.median,
+    p75: market.p75,
+    p90: market.p90,
+    max: market.max,
+    failed_demand: market.failed_demand ? ({
+      sample_size: market.failed_demand.sample_size,
+      max: market.failed_demand.max,
+      clearing_price_eligible: false,
+    }) : null,
+  }) : null;
+  const compactIntel = (intel) => {
+    if (!intel) return null;
+    const premium = intel.premium_auction_stress || {};
+    const budget = intel.budget_competition_at_premium_price || {};
+    return {
+      clearing_price_reference: intel.clearing_price_reference,
+      market_posture: intel.market_posture,
+      expected_to_clear_reference: intel.expected_to_clear_reference,
+      premium_auction_stress: {
+        premium_candidate: premium.premium_candidate,
+        verified_same_position_premium_clears: premium.verified_same_position_premium_clears,
+        highest_verified_same_position_bid: premium.highest_verified_same_position_bid,
+        same_position_winning_bids: (premium.same_position_winning_bids || []).slice(0, 2).map(
+          (bid) => ({player: bid.player, bid: bid.bid, team_id: bid.team_id})
+        ),
+        verified_cross_position_premium_clears: premium.verified_cross_position_premium_clears,
+        cross_position_winning_bids: (premium.cross_position_winning_bids || []).slice(0, 3).map(
+          (bid) => ({player: bid.player, position: bid.position, bid: bid.bid})
+        ),
+      },
+      budget_competition_at_premium_price: intel.budget_competition_at_premium_price ? ({
+        competitor_count: budget.competitor_count,
+        competitors_capable_at_target_bid: budget.competitors_capable_at_target_bid,
+        competitors_with_more_faab_than_waterboys: budget.competitors_with_more_faab_than_waterboys,
+      }) : null,
+      budget_competition: intel.budget_competition ? ({
+        competitor_count: intel.budget_competition.competitor_count,
+        competitors_capable_at_target_bid: intel.budget_competition.competitors_capable_at_target_bid,
+      }) : null,
+    };
+  };
+
   const compactTarget = (row) => ({
     player_id: row && row.player_id,
     name: row && row.name,
@@ -310,9 +356,9 @@ function buildBrief(snapshot, runId, stateCommit) {
     value: row && row.value,
     suggested_drop: row && row.suggested_drop,
     faab_reference: row && row.faab_reference,
-    market_reference: row && row.market_reference,
+    market_reference: compactMarket(row && row.market_reference),
     bid_guidance: row && row.bid_guidance,
-    faab_market_intelligence: row && row.faab_market_intelligence,
+    faab_market_intelligence: compactIntel(row && row.faab_market_intelligence),
     cost_efficiency: row && row.cost_efficiency,
   });
 
@@ -421,7 +467,7 @@ function buildBrief(snapshot, runId, stateCommit) {
           forecast_weighted_remaining_value: row.forecast_weighted_remaining_value,
           suggested_drop: row.suggested_drop,
           bid_guidance: row.bid_guidance,
-          faab_market_intelligence: row.faab_market_intelligence,
+          faab_market_intelligence: compactIntel(row.faab_market_intelligence),
         })),
       },
       faab_market_state: placement.faab_market_state || {},
