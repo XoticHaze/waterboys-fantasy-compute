@@ -320,6 +320,12 @@ function buildBrief(snapshot, runId, stateCommit) {
     const budget = intel.budget_competition_at_premium_price || {};
     return {
       clearing_price_reference: intel.clearing_price_reference,
+      failed_demand_pressure: intel.failed_demand_pressure ? ({
+        sample_size: intel.failed_demand_pressure.sample_size,
+        median: intel.failed_demand_pressure.median,
+        max: intel.failed_demand_pressure.max,
+        clearing_price_eligible: false,
+      }) : null,
       market_posture: intel.market_posture,
       expected_to_clear_reference: intel.expected_to_clear_reference,
       premium_auction_stress: {
