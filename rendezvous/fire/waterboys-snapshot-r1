@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "snapshot",
-  "nonce": "2026-10-22-premium-auction-intelligence-pr20-60464721",
-  "reason": "Post-merge verify verified premium-auction market stress and rival capacity on the five-team Week 7 release board"
+  "nonce": "2026-10-22-pr21-bounded-premium-brief-8ac93b72",
+  "reason": "Validate compact private brief readback and new premium auction intelligence after deploy"
 }
