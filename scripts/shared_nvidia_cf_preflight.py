@@ -3,6 +3,10 @@
 Runs under existing WaterBoys cloud deployment identity, never imports or
 prints NVIDIA key, Cloudflare bearer, account/store/secret identifiers.
 Only GETs trusted fixed endpoints; creates and mutates nothing.
+
+Recheck after operator confirms creation of the dedicated ordinary-account
+Worker on 2026-10-22. This checks actual Worker presence without testing
+credentials, changing source, or attaching a Secrets Store binding.
 """
 from __future__ import annotations
 import json
