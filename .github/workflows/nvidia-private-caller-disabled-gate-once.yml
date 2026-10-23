@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 1cd9cdf3839bca98c74d3b75d153bddc1a05543a
+          ref: 103ad851359277c0e9cae9cb76f46e2a1f535fa0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -36,7 +36,7 @@ jobs:
         working-directory: cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "1cd9cdf3839bca98c74d3b75d153bddc1a05543a"
+          test "$(git rev-parse HEAD)" = "103ad851359277c0e9cae9cb76f46e2a1f535fa0"
           npm test
           node --input-type=module - <<'JS'
           import fs from 'node:fs';
@@ -142,7 +142,7 @@ jobs:
           PY
             exit 1
           fi
-          curl -sS --max-time 30 -X POST -o "$RUNNER_TEMP/nvidia-private-caller-response.json"             -w '%{http_code}' http://127.0.0.1:8787/run-once > "$RUNNER_TEMP/nvidia-private-caller-http.txt"
+          curl -sS --max-time 30 -X POST --data-binary '' -o "$RUNNER_TEMP/nvidia-private-caller-response.json"             -w '%{http_code}' http://127.0.0.1:8787/run-once > "$RUNNER_TEMP/nvidia-private-caller-http.txt"
           python - <<'PY'
           import json,os
           from pathlib import Path
