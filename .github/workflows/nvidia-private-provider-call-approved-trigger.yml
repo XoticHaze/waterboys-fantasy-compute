@@ -1,0 +1,114 @@
+name: NVIDIA Authenticated Private Provider Probe (operator admitted)
+# Triggers ONLY when the exact small trigger file is updated after operator
+# has set CC_NVIDIA_DIAGNOSTIC_ENABLED=1 using authorized SlenderIQ dashboard.
+# No changes to the Worker, Secrets Store, routes, billing plan, or HAOS.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/nvidia_private_provider_approved_trigger.txt'
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  bounded-provider-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 103ad851359277c0e9cae9cb76f46e2a1f535fa0
+          path: approved-source
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Attest exact SlenderIQ Worker and explicitly admitted diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,json,re
+          from urllib.request import Request,urlopen
+          acc=os.environ.get('CLOUDFLARE_ACCOUNT_ID','');tok=os.environ.get('CLOUDFLARE_API_TOKEN','')
+          if not re.fullmatch(r'[0-9a-fA-F]{32}',acc) or not tok:
+              raise SystemExit('CLOUDFLARE_ACCOUNT_IDENTITY_INVALID')
+          def get(name):
+              req=Request('https://api.cloudflare.com/client/v4/accounts/'+acc+'/workers/scripts/'+name+'/settings',
+                  headers={'Authorization':'Bearer '+tok,'Accept':'application/json'})
+              with urlopen(req,timeout=15) as r:
+                  data=json.load(r)
+              if data.get('success') is not True: raise SystemExit('CLOUDFLARE_WORKER_SETTINGS_READ_FAILED')
+              return data.get('result',{})
+          get('waterboys-fantasy-broker')
+          bindings=get('cc-shared-nvidia-inference').get('bindings',[])
+          if not isinstance(bindings,list) or len(bindings)!=2: raise SystemExit('UNEXPECTED_BINDING_COUNT')
+          b={x.get('name'):x for x in bindings if isinstance(x,dict)}
+          if set(b)!={'NVIDIA_API_KEY','CC_NVIDIA_DIAGNOSTIC_ENABLED'}:
+              raise SystemExit('WRONG_BINDING_NAMES')
+          key=b['NVIDIA_API_KEY'];flag=b['CC_NVIDIA_DIAGNOSTIC_ENABLED']
+          if key.get('type')!='secrets_store_secret' or key.get('secret_name')!='NVIDIA_API_KEY':
+              raise SystemExit('WRONG_ACCOUNT_SECRET_REFERENCE')
+          if flag.get('type')!='plain_text' or flag.get('text')!='1':
+              raise SystemExit('PROVIDER_DIAGNOSTIC_NOT_APPROVED_AND_ENABLED')
+          print('PRIVATE_NVIDIA_BINDING_AND_DIAGNOSTIC_ADMISSION=VERIFIED')
+          PY
+      - name: Run fixed no-data private NVIDIA catalog and synthetic completion
+        shell: bash
+        working-directory: approved-source/cloudflare/shared-nvidia-inference
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "103ad851359277c0e9cae9cb76f46e2a1f535fa0"
+          npm test
+          export CI=true
+          npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_private_caller.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 40); do
+            if curl -s --max-time 2 http://127.0.0.1:8787/ -o /dev/null; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then echo 'NVIDIA_PRIVATE_SERVICE_CALLER=UNAVAILABLE'; exit 1; fi
+          curl --silent --show-error --max-time 75 -X POST --data-binary '' \
+            -o "$RUNNER_TEMP/nvidia_private_response.json" \
+            -w '%{http_code}' http://127.0.0.1:8787/run-once > "$RUNNER_TEMP/nvidia_private_http.txt"
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          status=(root/'nvidia_private_http.txt').read_text().strip()
+          try: v=json.loads((root/'nvidia_private_response.json').read_text())
+          except (ValueError,UnicodeError): raise SystemExit('PRIVATE_RECEIPT_NOT_JSON')
+          if v.get('schema')!='commandcenter.shared_nvidia_private_diagnostic.v1':
+              raise SystemExit('PRIVATE_PROVIDER_RECEIPT_UNAVAILABLE')
+          classification=v.get('classification')
+          admissible={'completion_http_200','completion_response_invalid','provider_access_rejected',
+                      'model_retired','provider_rate_limited','provider_http_error',
+                      'provider_response_unknown','catalog_transport_or_response_failure',
+                      'completion_transport_or_response_failure','secrets_store_read_unavailable',
+                      'secrets_store_value_unavailable','secrets_store_binding_missing'}
+          if classification not in admissible: raise SystemExit('UNEXPECTED_PRIVATE_DIAGNOSTIC_CLASSIFICATION')
+          calls=v.get('calls_made')
+          if type(calls)!=int or not 0<=calls<=2: raise SystemExit('NVIDIA_CALL_LIMIT_INVALID')
+          print('NVIDIA_PRIVATE_RESULT_CLASSIFICATION='+classification)
+          for field in ['catalog_http_status','completion_http_status','catalog_count','elapsed_ms','calls_made']:
+              item=v.get(field)
+              print('NVIDIA_'+field.upper()+'='+str(item if type(item)==int and 0<=item<=100000 else 'none'))
+          print('NVIDIA_EXPECTED_MODEL_FOUND='+str(v.get('catalog_includes_model') is True).lower())
+          print('NVIDIA_COMPLETION_RESPONSE_VALID='+str(v.get('completion_response_valid') is True).lower())
+          print('NVIDIA_PROVIDER_RAW_CONTENT_EXPORTED=false')
+          print('NVIDIA_PRIVATE_SECRET_VALUE_EXPORTED=false')
+          print('NVIDIA_HOUSEHOLD_DATA_EXPORTED=false')
+          print('NVIDIA_RESTORE_DIAGNOSTIC_TO_ZERO_REQUIRES_OPERATOR=TRUE')
+          if status!='200' or classification!='completion_http_200':
+              raise SystemExit('PROVIDER_FIRST_SYNTHETIC_COMPLETION_NOT_VERIFIED')
+          print('NVIDIA_FIRST_PRIVATE_PROVIDER_COMPLETION=PASS')
+          PY
