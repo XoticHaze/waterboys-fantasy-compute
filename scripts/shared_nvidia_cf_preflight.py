@@ -4,9 +4,9 @@ Runs under existing WaterBoys cloud deployment identity, never imports or
 prints NVIDIA key, Cloudflare bearer, account/store/secret identifiers.
 Only GETs trusted fixed endpoints; creates and mutates nothing.
 
-Recheck after operator confirms creation of the dedicated ordinary-account
-Worker on 2026-10-22. This checks actual Worker presence without testing
-credentials, changing source, or attaching a Secrets Store binding.
+Recheck after operator deploys existing NVIDIA Secrets Store binding.
+The ordinary deployment token cannot read Secrets Store metadata, so preserve
+Worker binding configuration proof separately from secret-value/runtime proof.
 """
 from __future__ import annotations
 import json
@@ -60,6 +60,7 @@ def check(account, token, probe=get_json):
         nvidia_binding_observed_type="not_present",
         nvidia_binding_type_correct=False,
         nvidia_binding_secret_reference_correct=False,
+        nvidia_binding_metadata_verified=False,
     )
     if not HEX.fullmatch(account or "") or not token:
         receipt["classification"] = "approved_cloudflare_identity_missing"
@@ -95,10 +96,15 @@ def check(account, token, probe=get_json):
                 and isinstance(entry.get("store_id"), str)
                 and HEX.fullmatch(entry["store_id"]) is not None
             )
+            receipt["nvidia_binding_metadata_verified"] = receipt["nvidia_binding_secret_reference_correct"]
     status, body = call("/secrets_store/stores?per_page=100")
     receipt["stores_http"] = status
     if status != 200 or body.get("success") is not True:
-        receipt["classification"] = "secrets_store_read_authority_unavailable"
+        receipt["classification"] = (
+            "worker_secrets_store_binding_metadata_verified_store_read_denied"
+            if receipt["nvidia_binding_metadata_verified"]
+            else "secrets_store_read_authority_unavailable"
+        )
         return receipt
     stores = body.get("result")
     if not isinstance(stores, list) or len(stores) != 1:
