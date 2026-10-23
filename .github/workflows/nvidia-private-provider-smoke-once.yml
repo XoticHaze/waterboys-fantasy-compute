@@ -1,0 +1,113 @@
+name: NVIDIA Private Fixed Catalog and Completion (One Shot)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/nvidia-private-provider-smoke-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  bounded-synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Checkout exact reviewed private caller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 103ad851359277c0e9cae9cb76f46e2a1f535fa0
+          path: approved-source
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Check exact scope and synthetic-only test contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/nvidia_private_diagnostic_gate_once.py
+          test "$(git -C approved-source rev-parse HEAD)" = "103ad851359277c0e9cae9cb76f46e2a1f535fa0"
+          cd approved-source/cloudflare/shared-nvidia-inference
+          npm test
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const d=JSON.parse(fs.readFileSync('local-probe/wrangler.jsonc','utf8'));
+          assert.equal(d.workers_dev,false);
+          assert.equal(d.preview_urls,false);
+          assert.deepEqual(d.services,[{binding:'NVIDIA_SERVICE',service:'cc-shared-nvidia-inference',remote:true}]);
+          console.log('NVIDIA_PRIVATE_ONE_SHOT_NO_PUBLIC_ROUTE=PASS');
+          JS
+      - name: Temporarily admit exact disabled private provider diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py enable
+      - name: Call fixed private NVIDIA catalog and synthetic completion once
+        shell: bash
+        working-directory: approved-source/cloudflare/shared-nvidia-inference
+        run: |
+          set -euo pipefail
+          export CI=true
+          npx --yes wrangler@4.151.3 --version >/dev/null
+          npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia-private-provider-caller.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 35); do
+            if curl -s --max-time 2 http://127.0.0.1:8787/ -o /dev/null; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            echo 'NVIDIA_PRIVATE_PROVIDER_CALLER_START=UNAVAILABLE'
+            exit 1
+          fi
+          curl -sS --connect-timeout 5 --max-time 75 -X POST --data-binary '' \
+            -o "$RUNNER_TEMP/nvidia-private-provider-receipt.json" \
+            -w '%{http_code}' http://127.0.0.1:8787/run-once \
+            > "$RUNNER_TEMP/nvidia-private-provider-http.txt"
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          root=Path(os.environ['RUNNER_TEMP'])
+          status=(root/'nvidia-private-provider-http.txt').read_text().strip()
+          try: doc=json.loads((root/'nvidia-private-provider-receipt.json').read_text())
+          except (ValueError,UnicodeError): raise SystemExit('PRIVATE_RECEIPT_INVALID_JSON')
+          if doc.get('schema')!='commandcenter.shared_nvidia_private_diagnostic.v1':
+              raise SystemExit('PRIVATE_SERVICE_BINDING_RECEIPT_NOT_PRESENT')
+          known={'completion_http_200','completion_response_invalid','provider_access_rejected','model_retired',
+                 'provider_rate_limited','provider_http_error','provider_response_unknown',
+                 'catalog_transport_or_response_failure','completion_transport_or_response_failure',
+                 'secrets_store_binding_missing','secrets_store_read_unavailable','secrets_store_value_unavailable'}
+          c=doc.get('classification')
+          if c not in known: raise SystemExit('UNEXPECTED_SANITIZED_CLASSIFICATION')
+          calls=doc.get('calls_made')
+          if not isinstance(calls,int) or calls<0 or calls>2:
+              raise SystemExit('NVIDIA_CALL_COUNT_UNBOUNDED')
+          print('NVIDIA_PRIVATE_RESULT_CLASSIFICATION='+c)
+          for k in ('catalog_http_status','completion_http_status'):
+              val=doc.get(k)
+              print('NVIDIA_'+k.upper()+'='+str(val if type(val)==int and 100<=val<=599 else 'none'))
+          for k in ('catalog_count','elapsed_ms','calls_made'):
+              val=doc.get(k)
+              print('NVIDIA_'+k.upper()+'='+str(val if type(val)==int and 0<=val<=60000 else 'none'))
+          print('NVIDIA_RAW_RESPONSE_EXPORTED=0')
+          print('NVIDIA_HOUSEHOLD_INPUTS=0')
+          if status!='200' or c!='completion_http_200':
+              raise SystemExit('AUTHENTICATED_PROVIDER_COMPLETION_NOT_PROVEN')
+          print('NVIDIA_AUTHENTICATED_PRIVATE_COMPLETION=PASS')
+          PY
+      - name: Always restore disabled production diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py restore
+          echo 'NVIDIA_PRIVATE_DIAGNOSTIC_DISABLED_RESTORED=1'
