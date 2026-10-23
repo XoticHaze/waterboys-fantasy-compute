@@ -1,0 +1,1 @@
+Operator admission: 2026-10-23 CDT. User confirmed CC_NVIDIA_DIAGNOSTIC_ENABLED=1 in SlenderIQ. Run existing private fixed NVIDIA catalog + single synthetic completion only. No home content, no key export, no public route. Post-probe operator must restore diagnostic flag 0.
