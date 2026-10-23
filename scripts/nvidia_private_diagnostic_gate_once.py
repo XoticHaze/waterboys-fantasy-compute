@@ -114,6 +114,10 @@ def set_switch(account, token, target):
     status, doc = cf(account, token, "PATCH", "/workers/scripts/" + TARGET + "/settings",
                       {"bindings": [key_binding, vars_binding]})
     if status not in (200, 201) or doc.get("success") is not True:
+        errors = doc.get("errors") if isinstance(doc, dict) else None
+        codes = [e.get("code") for e in errors if isinstance(e, dict)] if isinstance(errors, list) else []
+        safe_codes = [str(x) for x in codes if type(x) is int and 0 <= x <= 999999]
+        print("NVIDIA_PATCH_CLOUDFLARE_ERROR_CODES=" + (",".join(safe_codes[:4]) if safe_codes else "none"))
         fail("WORKER_EXACT_SETTINGS_PATCH_DENIED_OR_FAILED_HTTP_" + str(status if isinstance(status, int) else "transport"))
     after_key, after_value = read(account, token)
     if (after_key.get("store_id") != prior_key.get("store_id")
