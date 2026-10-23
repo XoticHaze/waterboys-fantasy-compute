@@ -110,6 +110,24 @@ jobs:
           labels=[key for key,pattern in patterns.items() if re.search(pattern,data)]
           print('NVIDIA_PRIVATE_CALLER_START_FAILURE_CLASS=' + (','.join(labels) if labels else 'unclassified'))
           print('NVIDIA_PRIVATE_CALLER_LOG_LINES='+str(len(data.splitlines())))
+          # Report only the first selected known failure signature. Never
+          # publish Wrangler's raw log, environment variables, or headers.
+          signatures={
+              'workerd_spawn':r'(?:failed to|cannot|unable to) (?:spawn|start).*workerd|spawn.*workerd',
+              'workerd_missing':r'(?:enoent|not found).*workerd|workerd.*(?:enoent|not found)',
+              'permission_eprem':r'eperm|operation not permitted',
+              'permission_eacces':r'eacces|permission denied',
+              'port_collision':r'eaddrinuse|address already in use',
+              'invalid_address':r'listen.*(?:eaddrnotavail|einval)|address not available',
+              'missing_cloudflare_auth':r'authentication error|invalid api token|missing api token',
+              'failed_to_start_workerd':r'failed to start workerd',
+              'unknown_bind_error':r'failed to start (?:local server|worker|dev server)',
+              'node_exception':r'uncaught exception|unhandled rejection|node:internal',
+              'wrangler_bug':r'this is likely a bug in wrangler|internal error',
+              'remote_service':r'failed.*(?:remote|service binding)|remote.*(?:unauthorized|forbidden)',
+          }
+          labels=[name for name,pattern in signatures.items() if re.search(pattern,data)]
+          print('NVIDIA_PRIVATE_CALLER_FAILURE_SIGNATURE='+(','.join(labels) if labels else 'no_known_signature'))
           PY
             exit 1
           fi
