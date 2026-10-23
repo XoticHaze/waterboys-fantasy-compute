@@ -152,9 +152,10 @@ jobs:
           except Exception: raise SystemExit('PRIVATE_CALLER_RECEIPT_INVALID')
           category=payload.get('classification')
           approved={'unexpected_upstream_receipt','remote_service_binding_missing','service_binding_transport_or_receipt_failure'}
+          other={'local_route_unavailable','request_body_not_allowed','caller_already_invoked','unknown_provider_classification','diagnostic_not_admitted','secrets_store_binding_missing'}
+          print('PRIVATE_CALLER_HTTP=' + (status if status in ('200','400','404','409','502','503') else 'other'))
+          print('PRIVATE_CALLER_CLASSIFICATION=' + (category if category in approved|other else 'unrecognized'))
           if category not in approved: raise SystemExit('UNEXPECTED_PRIVATE_CALLER_REPLY')
-          print('PRIVATE_CALLER_HTTP='+status)
-          print('PRIVATE_CALLER_CLASSIFICATION='+category)
           print('PRIVATE_TARGET_DIAGNOSTICS_REMAIN_DISABLED=1')
           print('NVIDIA_PROVIDER_REQUESTS=0')
           if category!='unexpected_upstream_receipt':
