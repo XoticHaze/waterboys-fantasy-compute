@@ -1,0 +1,34 @@
+name: NVIDIA Full Catalog Role Campaign Offline Proof (existing compute)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/nvidia-full-catalog-offline-proof-once.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/voice-engine
+          ref: 53ad8bafc3405eeb609400bf6b4ac10ea6ab5fdb
+          path: source
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Execute full-catalog and existing role contracts (synthetic only)
+        working-directory: source/backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check httpx==0.28.1
+          python -m py_compile scripts/run_nvidia_catalog_campaign.py tests/test_nvidia_catalog_campaign.py
+          python -m unittest -v tests.test_nvidia_catalog_campaign tests.test_llm_cloud_role_benchmark tests.test_llm_role_registry
+          echo 'NVIDIA_FULL_CATALOG_OFFLINE_CONTRACTS=PASS'
+          echo 'NVIDIA_PRIVATE_KEY_AVAILABLE=NO'
+          echo 'NVIDIA_PROVIDER_REQUESTS=0'
