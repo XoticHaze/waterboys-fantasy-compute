@@ -1,0 +1,26 @@
+name: NVIDIA Private Diagnostic Recovery Guardian
+on:
+  workflow_run:
+    workflows:
+      - "NVIDIA Private Fixed Catalog and Completion (One Shot)"
+    types: [completed]
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Independent exact-target private diagnostic disabled readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py restore
+          echo 'NVIDIA_POST_RUN_INDEPENDENT_DISABLED_GATE=PASS'
