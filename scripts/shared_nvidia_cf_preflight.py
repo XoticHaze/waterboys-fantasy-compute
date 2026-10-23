@@ -56,6 +56,9 @@ def check(account, token, probe=get_json):
         stores_http=None, secret_list_http=None,
         secret_seen=None, secret_active=None, workers_scope=None,
         classification="unattempted",
+        nvidia_binding_present=False,
+        nvidia_binding_type_correct=False,
+        nvidia_binding_secret_reference_correct=False,
     )
     if not HEX.fullmatch(account or "") or not token:
         receipt["classification"] = "approved_cloudflare_identity_missing"
@@ -69,8 +72,22 @@ def check(account, token, probe=get_json):
     if status != 200:
         receipt["classification"] = "ordinary_account_identity_not_proven"
         return receipt
-    status, _ = call("/workers/scripts/cc-shared-nvidia-inference/settings")
+    status, worker_settings = call("/workers/scripts/cc-shared-nvidia-inference/settings")
     receipt["nvidia_worker_http"] = status
+    if status == 200 and worker_settings.get("success") is True:
+        bindings = (worker_settings.get("result") or {}).get("bindings")
+        bindings = bindings if isinstance(bindings, list) else []
+        candidates = [b for b in bindings if isinstance(b, dict) and b.get("name") == "NVIDIA_API_KEY"]
+        receipt["nvidia_binding_present"] = len(candidates) == 1
+        if len(candidates) == 1:
+            entry = candidates[0]
+            receipt["nvidia_binding_type_correct"] = entry.get("type") == "secrets_store_secret"
+            receipt["nvidia_binding_secret_reference_correct"] = (
+                receipt["nvidia_binding_type_correct"]
+                and entry.get("secret_name") == "NVIDIA_API_KEY"
+                and isinstance(entry.get("store_id"), str)
+                and HEX.fullmatch(entry["store_id"]) is not None
+            )
     status, body = call("/secrets_store/stores?per_page=100")
     receipt["stores_http"] = status
     if status != 200 or body.get("success") is not True:
