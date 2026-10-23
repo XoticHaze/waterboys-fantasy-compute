@@ -4,7 +4,7 @@ Runs under existing WaterBoys cloud deployment identity, never imports or
 prints NVIDIA key, Cloudflare bearer, account/store/secret identifiers.
 Only GETs trusted fixed endpoints; creates and mutates nothing.
 
-Recheck after operator deploys existing NVIDIA Secrets Store binding.
+Recheck after bounded Wrangler bound-redeploy authorization rejection on 2026-10-23.
 The ordinary deployment token cannot read Secrets Store metadata, so preserve
 Worker binding configuration proof separately from secret-value/runtime proof.
 """
