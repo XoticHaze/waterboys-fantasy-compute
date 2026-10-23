@@ -1,0 +1,114 @@
+name: NVIDIA Existing Binding Preserving Redeploy Proof (One Shot)
+# Existing private Worker only. Same reviewed source already deployed.
+# The Store ID comes from authenticated Worker binding readback, never chat/CI logs.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/nvidia-bound-worker-redeploy-preflight-once.yml']
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  exact-target-bound-redeploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 1cd9cdf3839bca98c74d3b75d153bddc1a05543a
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify exact unchanged production source and known offline contracts
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1cd9cdf3839bca98c74d3b75d153bddc1a05543a"
+          npm test
+          node --check src/index.js
+      - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          a=os.environ.get('CLOUDFLARE_ACCOUNT_ID','')
+          t=os.environ.get('CLOUDFLARE_API_TOKEN','')
+          if not re.fullmatch(r'[a-fA-F0-9]{32}',a) or not t: raise SystemExit('TRUSTED_COMPUTE_IDENTITY_MISSING')
+          def read(name):
+              req=Request('https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/'+name+'/settings',
+                  headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+              with urlopen(req,timeout=16) as r: doc=json.load(r)
+              if doc.get('success') is not True: raise SystemExit('CLOUDFLARE_READBACK_FAILED')
+              return doc.get('result',{})
+          if not isinstance(read('waterboys-fantasy-broker'),dict): raise SystemExit('WRONG_ACCOUNT')
+          prior=read('cc-shared-nvidia-inference')
+          rows=prior.get('bindings',[])
+          if not isinstance(rows,list) or len(rows)!=2: raise SystemExit('WORKER_BINDING_COUNT_MISMATCH')
+          b={v.get('name'):v for v in rows if isinstance(v,dict)}
+          if set(b)!={'NVIDIA_API_KEY','CC_NVIDIA_DIAGNOSTIC_ENABLED'}: raise SystemExit('UNEXPECTED_BINDING_NAME')
+          secret=b['NVIDIA_API_KEY'];flag=b['CC_NVIDIA_DIAGNOSTIC_ENABLED']
+          store=secret.get('store_id')
+          if not (secret.get('type')=='secrets_store_secret' and secret.get('secret_name')=='NVIDIA_API_KEY'
+                  and isinstance(store,str) and re.fullmatch(r'[a-fA-F0-9]{32}',store)):
+              raise SystemExit('ACCOUNT_STORE_REFERENCE_NOT_VERIFIED')
+          if flag.get('type')!='plain_text' or flag.get('text')!='0':
+              raise SystemExit('PRODUCTION_DIAGNOSTIC_NOT_DISABLED')
+          cfg=json.loads(Path('wrangler.jsonc').read_text())
+          if not (cfg.get('name')=='cc-shared-nvidia-inference' and cfg.get('workers_dev') is False
+                  and cfg.get('preview_urls') is False and cfg.get('vars',{}).get('CC_NVIDIA_DIAGNOSTIC_ENABLED')=='0'
+                  and 'secrets_store_secrets' not in cfg):
+              raise SystemExit('REVIEWED_PRIVATE_SOURCE_MANIFEST_MISMATCH')
+          cfg['secrets_store_secrets']=[{'binding':'NVIDIA_API_KEY','store_id':store,
+                                         'secret_name':'NVIDIA_API_KEY'}]
+          Path('wrangler.bound.jsonc').write_text(json.dumps(cfg,indent=2)+'\n')
+          print('EPHEMERAL_BOUND_MANIFEST=VALIDATED')
+          print('TRUSTED_ACCOUNT_SECRET_REFERENCE=EXISTING_ONLY')
+          print('PRODUCTION_DIAGNOSTIC_DISABLED=1')
+          PY
+      - name: Replay exactly existing reviewed code with preserved Secrets Store binding
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npx --yes wrangler@4.151.3 deploy --config wrangler.bound.jsonc \
+              > "$RUNNER_TEMP/nvidia-bound-redeploy.log" 2>&1; then
+            echo 'NVIDIA_BOUND_REDEPLOY=REJECTED'
+            echo 'NVIDIA_BOUND_WORKER_UNCHANGED_UNLESS_CLOUDFLARE_CONTROL_READBACK_DISAGREES'
+            exit 1
+          fi
+          echo 'NVIDIA_BOUND_REDEPLOY=ACCEPTED'
+      - name: Confirm exact binding and disabled diagnostic after deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,json,re
+          from urllib.request import Request,urlopen
+          a=os.environ['CLOUDFLARE_ACCOUNT_ID'];t=os.environ['CLOUDFLARE_API_TOKEN']
+          req=Request('https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/cc-shared-nvidia-inference/settings',
+              headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+          with urlopen(req,timeout=20) as r: doc=json.load(r)
+          if doc.get('success') is not True: raise SystemExit('READBACK_UNAVAILABLE')
+          rows=doc.get('result',{}).get('bindings',[])
+          if len(rows)!=2: raise SystemExit('UNEXPECTED_BINDING_COUNT')
+          b={x.get('name'):x for x in rows if isinstance(x,dict)}
+          key=b.get('NVIDIA_API_KEY',{});flag=b.get('CC_NVIDIA_DIAGNOSTIC_ENABLED',{})
+          if key.get('type')!='secrets_store_secret' or key.get('secret_name')!='NVIDIA_API_KEY' or not re.fullmatch(r'[a-fA-F0-9]{32}',str(key.get('store_id') or '')):
+              raise SystemExit('ACCOUNT_SECRET_BINDING_NOT_PRESERVED')
+          if flag.get('type')!='plain_text' or flag.get('text')!='0':
+              raise SystemExit('DIAGNOSTIC_DISABLED_NOT_PRESERVED')
+          print('NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS')
+          print('NVIDIA_SECRET_VALUE_ACCESSED=0')
+          print('NVIDIA_PROVIDER_CALLS=0')
+          PY
