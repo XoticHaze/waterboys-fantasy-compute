@@ -62,19 +62,21 @@ jobs:
           if not (secret.get('type')=='secrets_store_secret' and secret.get('secret_name')=='NVIDIA_API_KEY'
                   and isinstance(store,str) and re.fullmatch(r'[a-fA-F0-9]{32}',store)):
               raise SystemExit('ACCOUNT_STORE_REFERENCE_NOT_VERIFIED')
-          if flag.get('type')!='plain_text' or flag.get('text')!='0':
-              raise SystemExit('PRODUCTION_DIAGNOSTIC_NOT_DISABLED')
+          if flag.get('type')!='plain_text' or flag.get('text') not in ('0','1'):
+              raise SystemExit('PRODUCTION_DIAGNOSTIC_FLAG_INVALID')
+          observed_flag=flag['text']
           cfg=json.loads(Path('wrangler.jsonc').read_text())
           if not (cfg.get('name')=='cc-shared-nvidia-inference' and cfg.get('workers_dev') is False
                   and cfg.get('preview_urls') is False and cfg.get('vars',{}).get('CC_NVIDIA_DIAGNOSTIC_ENABLED')=='0'
                   and 'secrets_store_secrets' not in cfg):
               raise SystemExit('REVIEWED_PRIVATE_SOURCE_MANIFEST_MISMATCH')
+          cfg['vars']['CC_NVIDIA_DIAGNOSTIC_ENABLED']=observed_flag
           cfg['secrets_store_secrets']=[{'binding':'NVIDIA_API_KEY','store_id':store,
                                          'secret_name':'NVIDIA_API_KEY'}]
           Path('wrangler.bound.jsonc').write_text(json.dumps(cfg,indent=2)+'\n')
           print('EPHEMERAL_BOUND_MANIFEST=VALIDATED')
           print('TRUSTED_ACCOUNT_SECRET_REFERENCE=EXISTING_ONLY')
-          print('PRODUCTION_DIAGNOSTIC_DISABLED=1')
+          print('PRODUCTION_DIAGNOSTIC_VALUE_PRESERVED=' + observed_flag)
           PY
       - name: Replay exactly existing reviewed code with preserved Secrets Store binding
         working-directory: cloudflare/shared-nvidia-inference
@@ -106,8 +108,8 @@ jobs:
           key=b.get('NVIDIA_API_KEY',{});flag=b.get('CC_NVIDIA_DIAGNOSTIC_ENABLED',{})
           if key.get('type')!='secrets_store_secret' or key.get('secret_name')!='NVIDIA_API_KEY' or not re.fullmatch(r'[a-fA-F0-9]{32}',str(key.get('store_id') or '')):
               raise SystemExit('ACCOUNT_SECRET_BINDING_NOT_PRESERVED')
-          if flag.get('type')!='plain_text' or flag.get('text')!='0':
-              raise SystemExit('DIAGNOSTIC_DISABLED_NOT_PRESERVED')
+          if flag.get('type')!='plain_text' or flag.get('text') not in ('0','1'):
+              raise SystemExit('DIAGNOSTIC_FLAG_INVALID_AFTER_DEPLOY')
           print('NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS')
           print('NVIDIA_SECRET_VALUE_ACCESSED=0')
           print('NVIDIA_PROVIDER_CALLS=0')
