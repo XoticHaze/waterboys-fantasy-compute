@@ -1,9 +1,8 @@
 name: NVIDIA Private Worker Source Deploy (existing compute identity)
+# Retired after live source deployment. Manual only, and hard-denies replay once
+# the private NVIDIA account Secrets Store binding is present.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/nvidia-private-worker-source-deploy.yml"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -64,6 +63,12 @@ jobs:
                   return r.status
           if status('waterboys-fantasy-broker')!=200 or status('cc-shared-nvidia-inference')!=200:
               raise SystemExit('EXISTING_ORDINARY_TARGET_UNVERIFIED')
+          req=Request('https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/cc-shared-nvidia-inference/settings',
+              headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+          with urlopen(req,timeout=15) as response: doc=json.load(response)
+          binds=(doc.get('result') or {}).get('bindings') or []
+          if any(isinstance(b,dict) and b.get('name')=='NVIDIA_API_KEY' for b in binds):
+              raise SystemExit('ALREADY_BOUND_WORKER__UNBOUND_MANIFEST_REDEPLOY_FORBIDDEN')
           print('ORDINARY_COMPUTE_AND_EXISTING_NVIDIA_WORKER=PASS')
           PY
       - name: Deploy reviewed private Worker source without a secret binding
