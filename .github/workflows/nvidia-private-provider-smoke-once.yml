@@ -1,5 +1,5 @@
 name: NVIDIA Private Fixed Catalog and Completion (One Shot)
-# R2: bounded status discriminator for exact Cloudflare settings authorization
+# R3: numeric Cloudflare error-code discriminator, no raw errors or secret metadata
 on:
   push:
     branches: [main]
