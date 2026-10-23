@@ -81,16 +81,36 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
+          export CI=true
+          npx --yes wrangler@4.135.0 --version >/dev/null
           npx --yes wrangler@4.135.0 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia-private-caller-local.log" 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           ready=0
-          for attempt in $(seq 1 35); do
+          for attempt in $(seq 1 65); do
             if curl --silent --max-time 2 http://127.0.0.1:8787/ -o /dev/null; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
             sleep 1
           done
           if [ "$ready" -ne 1 ]; then
             echo 'NVIDIA_PRIVATE_CALLER_LOOPBACK=UNAVAILABLE'
+            python - <<'PY'
+          import os,re
+          from pathlib import Path
+          data=(Path(os.environ['RUNNER_TEMP'])/'nvidia-private-caller-local.log').read_text(errors='replace').lower()
+          patterns={
+              'remote_binding_auth':r'permission|forbidden|unauthorized|authentication|access denied|10000|10001',
+              'remote_binding_setup':r'service binding|remote binding|cannot connect to|failed to connect to|unsupported',
+              'wrangler_config':r'configuration file|invalid config|validation error|wrangler.toml',
+              'wrangler_dependency':r'module not found|cannot find package|npm err|econnreset|network timeout',
+              'wrangler_interactive_prompt':r'would you like to|press enter|select an account',
+              'local_bind':r'eaddrinuse|address already in use|failed to start|listen eacces',
+              'wrangler_error_other':r'\[error\]|✘|error:',
+          }
+          labels=[key for key,pattern in patterns.items() if re.search(pattern,data)]
+          print('NVIDIA_PRIVATE_CALLER_START_FAILURE_CLASS=' + (','.join(labels) if labels else 'unclassified'))
+          print('NVIDIA_PRIVATE_CALLER_LOG_LINES='+str(len(data.splitlines())))
+          PY
             exit 1
           fi
           curl -sS --max-time 30 -X POST -o "$RUNNER_TEMP/nvidia-private-caller-response.json"             -w '%{http_code}' http://127.0.0.1:8787/run-once > "$RUNNER_TEMP/nvidia-private-caller-http.txt"
