@@ -94,6 +94,22 @@ class TestCloudflareNvidiaPreflight(unittest.TestCase):
         self.assertFalse(r["binding_verified"])
         self.assertNotIn(STORE, str(r))
 
+    def test_verified_binding_metadata_survives_store_read_403(self):
+        def cloud(path, token):
+            if path.endswith("/cc-shared-nvidia-inference/settings"):
+                return 200, {"success": True, "result": {"bindings": [{
+                    "name": "NVIDIA_API_KEY", "type": "secrets_store_secret",
+                    "store_id": STORE, "secret_name": "NVIDIA_API_KEY",
+                }]}}
+            if path.endswith("/secrets_store/stores?per_page=100"):
+                return 403, {"success": False}
+            return happy(path, token)
+        record = self.go(cloud)
+        self.assertEqual(record["classification"], "worker_secrets_store_binding_metadata_verified_store_read_denied")
+        self.assertTrue(record["nvidia_binding_metadata_verified"])
+        self.assertFalse(record["binding_verified"])
+        self.assertNotIn(STORE, str(record))
+
     def test_plain_secret_does_not_count_as_secrets_store(self):
         def plain(path, token):
             if path.endswith("/cc-shared-nvidia-inference/settings"):
