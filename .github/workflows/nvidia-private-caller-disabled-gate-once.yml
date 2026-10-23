@@ -1,0 +1,113 @@
+name: NVIDIA Private Caller Disabled-Gate Proof (One Shot)
+
+# No deployment and no provider call. The diagnostic target is configured
+# disabled; a loopback caller checks remote service-binding connectivity.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/nvidia-private-caller-disabled-gate-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nvidia-private-caller-disabled-gate-once
+  cancel-in-progress: false
+
+jobs:
+  private-service-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout pinned reviewed private caller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 1cd9cdf3839bca98c74d3b75d153bddc1a05543a
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify source and no-public-route configuration
+        shell: bash
+        working-directory: cloudflare/shared-nvidia-inference
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1cd9cdf3839bca98c74d3b75d153bddc1a05543a"
+          npm test
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const c=JSON.parse(fs.readFileSync('local-probe/wrangler.jsonc','utf8'));
+          assert.equal(c.name,'cc-shared-nvidia-operator-local-caller');
+          assert.equal(c.workers_dev,false);
+          assert.equal(c.preview_urls,false);
+          assert.deepEqual(c.services,[{
+            binding:'NVIDIA_SERVICE',service:'cc-shared-nvidia-inference',remote:true
+          }]);
+          console.log('PRIVATE_SERVICE_CALLER_CONTRACT=PASS');
+          JS
+      - name: Verify target binding metadata and disabled diagnostic gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,json,re
+          from urllib.request import Request,urlopen
+          a=os.environ['CLOUDFLARE_ACCOUNT_ID'];t=os.environ['CLOUDFLARE_API_TOKEN']
+          if re.fullmatch(r'[a-fA-F0-9]{32}',a) is None or not t: raise SystemExit('CLOUDFLARE_AUTH_MISSING')
+          def get(n):
+              with urlopen(Request('https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/'+n+'/settings',headers={'Authorization':'Bearer '+t,'Accept':'application/json'}),timeout=15) as r:
+                  return json.load(r)
+          if get('waterboys-fantasy-broker').get('success') is not True: raise SystemExit('ORDINARY_ACCOUNT_UNPROVEN')
+          d=get('cc-shared-nvidia-inference')
+          if d.get('success') is not True: raise SystemExit('NVIDIA_WORKER_UNAVAILABLE')
+          b=(d.get('result') or {}).get('bindings') or []
+          keys=[x for x in b if isinstance(x,dict) and x.get('name')=='NVIDIA_API_KEY']
+          vars=[x for x in b if isinstance(x,dict) and x.get('name')=='CC_NVIDIA_DIAGNOSTIC_ENABLED']
+          if len(keys)!=1 or keys[0].get('type')!='secrets_store_secret' or keys[0].get('secret_name')!='NVIDIA_API_KEY':
+              raise SystemExit('PRIVATE_NVIDIA_BINDING_NOT_APPROVED')
+          if len(vars)!=1 or vars[0].get('type')!='plain_text' or vars[0].get('text')!='0':
+              raise SystemExit('DIAGNOSTIC_MUST_REMAIN_DISABLED')
+          print('NVIDIA_PRIVATE_BINDING_CONFIG_VERIFIED=1')
+          print('NVIDIA_DIAGNOSTICS_DISABLED=1')
+          PY
+      - name: Exercise loopback-only caller against disabled private target
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npx --yes wrangler@4.135.0 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia-private-caller-local.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 35); do
+            if curl --silent --max-time 2 http://127.0.0.1:8787/ -o /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'NVIDIA_PRIVATE_CALLER_LOOPBACK=UNAVAILABLE'
+            exit 1
+          fi
+          curl -sS --max-time 30 -X POST -o "$RUNNER_TEMP/nvidia-private-caller-response.json"             -w '%{http_code}' http://127.0.0.1:8787/run-once > "$RUNNER_TEMP/nvidia-private-caller-http.txt"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          status=(root/'nvidia-private-caller-http.txt').read_text().strip()
+          try: payload=json.loads((root/'nvidia-private-caller-response.json').read_text())
+          except Exception: raise SystemExit('PRIVATE_CALLER_RECEIPT_INVALID')
+          category=payload.get('classification')
+          approved={'unexpected_upstream_receipt','remote_service_binding_missing','service_binding_transport_or_receipt_failure'}
+          if category not in approved: raise SystemExit('UNEXPECTED_PRIVATE_CALLER_REPLY')
+          print('PRIVATE_CALLER_HTTP='+status)
+          print('PRIVATE_CALLER_CLASSIFICATION='+category)
+          print('PRIVATE_TARGET_DIAGNOSTICS_REMAIN_DISABLED=1')
+          print('NVIDIA_PROVIDER_REQUESTS=0')
+          if category!='unexpected_upstream_receipt':
+              raise SystemExit('PRIVATE_REMOTE_SERVICE_BOUNDARY_NOT_PROVEN')
+          PY
