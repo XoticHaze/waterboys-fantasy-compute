@@ -114,7 +114,7 @@ def set_switch(account, token, target):
     status, doc = cf(account, token, "PATCH", "/workers/scripts/" + TARGET + "/settings",
                       {"bindings": [key_binding, vars_binding]})
     if status not in (200, 201) or doc.get("success") is not True:
-        fail("WORKER_EXACT_SETTINGS_PATCH_DENIED_OR_FAILED")
+        fail("WORKER_EXACT_SETTINGS_PATCH_DENIED_OR_FAILED_HTTP_" + str(status if isinstance(status, int) else "transport"))
     after_key, after_value = read(account, token)
     if (after_key.get("store_id") != prior_key.get("store_id")
             or after_value != target):
