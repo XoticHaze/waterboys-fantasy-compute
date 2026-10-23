@@ -57,6 +57,7 @@ def check(account, token, probe=get_json):
         secret_seen=None, secret_active=None, workers_scope=None,
         classification="unattempted",
         nvidia_binding_present=False,
+        nvidia_binding_observed_type="not_present",
         nvidia_binding_type_correct=False,
         nvidia_binding_secret_reference_correct=False,
     )
@@ -81,6 +82,12 @@ def check(account, token, probe=get_json):
         receipt["nvidia_binding_present"] = len(candidates) == 1
         if len(candidates) == 1:
             entry = candidates[0]
+            kind = entry.get("type")
+            receipt["nvidia_binding_observed_type"] = (
+                kind if kind in ("secrets_store_secret", "secret_text", "secret_key",
+                                  "secrets_store", "secret", "var", "plain_text")
+                else "unrecognized_or_missing"
+            )
             receipt["nvidia_binding_type_correct"] = entry.get("type") == "secrets_store_secret"
             receipt["nvidia_binding_secret_reference_correct"] = (
                 receipt["nvidia_binding_type_correct"]
