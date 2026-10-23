@@ -82,21 +82,8 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           export CI=true
-          npx --yes wrangler@4.135.0 --version >/dev/null
-          # Only the ephemeral GitHub runner's LOCAL caller uses an older date.
-          # No production config, source commit, or binding is modified.
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          path=Path('local-probe/wrangler.jsonc')
-          doc=json.loads(path.read_text())
-          if doc['name']!='cc-shared-nvidia-operator-local-caller' or doc['compatibility_date']!='2026-10-18' or len(doc['services'])!=1 or doc.get('workers_dev') is not False:
-              raise SystemExit('UNEXPECTED_PRIVATE_CALLER_CONFIG')
-          doc['compatibility_date']='2026-01-01'
-          path.write_text(json.dumps(doc,indent=2)+'\\n')
-          print('RUNNER_ONLY_WORKERD_COMPATIBILITY_DATE=2026-01-01')
-          PY
-          npx --yes wrangler@4.135.0 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia-private-caller-local.log" 2>&1 &
+          npx --yes wrangler@4.151.3 --version >/dev/null
+          npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia-private-caller-local.log" 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
           ready=0
