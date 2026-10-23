@@ -1,10 +1,10 @@
-name: NVIDIA Existing Binding Preserving Redeploy Proof (One Shot)
+name: NVIDIA Reviewed Bound Source Deploy (authorized only)
 # Existing private Worker only. Same reviewed source already deployed.
 # The Store ID comes from authenticated Worker binding readback, never chat/CI logs.
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/nvidia-bound-worker-redeploy-preflight-once.yml']
+    paths: ['ops/nvidia_authorized_bound_source_deploy_trigger.txt']
 permissions:
   contents: read
 concurrency:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 1cd9cdf3839bca98c74d3b75d153bddc1a05543a
+          ref: 3a16a28d495e91668f631c8864a2b9c5fc8d4e93
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "1cd9cdf3839bca98c74d3b75d153bddc1a05543a"
+          test "$(git rev-parse HEAD)" = "3a16a28d495e91668f631c8864a2b9c5fc8d4e93"
           npm test
           node --check src/index.js
       - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
