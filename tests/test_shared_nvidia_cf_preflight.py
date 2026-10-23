@@ -79,6 +79,33 @@ class TestCloudflareNvidiaPreflight(unittest.TestCase):
             return happy(path, token)
         self.assertEqual(self.go(test_probe)["classification"], "single_compute_store_unverified")
 
+    def test_verified_secrets_store_reference_is_metadata_only(self):
+        def with_binding(path, token):
+            if path.endswith("/cc-shared-nvidia-inference/settings"):
+                return 200, {"success": True, "result": {"bindings": [{
+                    "name": "NVIDIA_API_KEY", "type": "secrets_store_secret",
+                    "store_id": STORE, "secret_name": "NVIDIA_API_KEY",
+                }]}}
+            return happy(path, token)
+        r = self.go(with_binding)
+        self.assertTrue(r["nvidia_binding_present"])
+        self.assertTrue(r["nvidia_binding_type_correct"])
+        self.assertTrue(r["nvidia_binding_secret_reference_correct"])
+        self.assertFalse(r["binding_verified"])
+        self.assertNotIn(STORE, str(r))
+
+    def test_plain_secret_does_not_count_as_secrets_store(self):
+        def plain(path, token):
+            if path.endswith("/cc-shared-nvidia-inference/settings"):
+                return 200, {"success": True, "result": {"bindings": [{
+                    "name": "NVIDIA_API_KEY", "type": "secret_text",
+                }]}}
+            return happy(path, token)
+        r = self.go(plain)
+        self.assertTrue(r["nvidia_binding_present"])
+        self.assertFalse(r["nvidia_binding_type_correct"])
+        self.assertFalse(r["nvidia_binding_secret_reference_correct"])
+
     def test_worker_present_not_binding_proof(self):
         def test_probe(path, token):
             if path.endswith("/cc-shared-nvidia-inference/settings"):
