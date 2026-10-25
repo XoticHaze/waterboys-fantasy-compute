@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 20e11760d668cfefebc3f5f0b5c7352a2408ead1
+          ref: 247bd59d12b7e899198949c40ccbdd2d5f3a0557
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C approved-source rev-parse HEAD)" = "20e11760d668cfefebc3f5f0b5c7352a2408ead1"
+          test "$(git -C approved-source rev-parse HEAD)" = "247bd59d12b7e899198949c40ccbdd2d5f3a0557"
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           python - <<'PY'
           import re
@@ -59,7 +59,7 @@ jobs:
         working-directory: approved-source/cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "20e11760d668cfefebc3f5f0b5c7352a2408ead1"
+          test "$(git rev-parse HEAD)" = "247bd59d12b7e899198949c40ccbdd2d5f3a0557"
           export CI=true
           npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_role_local_caller.log" 2>&1 &
           pid=$!
