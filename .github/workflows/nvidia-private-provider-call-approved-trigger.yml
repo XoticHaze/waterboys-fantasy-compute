@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 103ad851359277c0e9cae9cb76f46e2a1f535fa0
+          ref: 834fd2e41d9764fb6d5f844d1a9986019c8f6070
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -64,7 +64,7 @@ jobs:
         working-directory: approved-source/cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "103ad851359277c0e9cae9cb76f46e2a1f535fa0"
+          test "$(git rev-parse HEAD)" = "834fd2e41d9764fb6d5f844d1a9986019c8f6070"
           npm test
           export CI=true
           npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_private_caller.log" 2>&1 &
@@ -103,6 +103,11 @@ jobs:
               item=v.get(field)
               print('NVIDIA_'+field.upper()+'='+str(item if type(item)==int and 0<=item<=100000 else 'none'))
           print('NVIDIA_EXPECTED_MODEL_FOUND='+str(v.get('catalog_includes_model') is True).lower())
+          print('NVIDIA_CATALOG_ATTEMPT_STARTED='+str(v.get('catalog_attempt_started') is True).lower())
+          stage=v.get('catalog_failure_stage')
+          kind=v.get('catalog_failure_kind')
+          print('NVIDIA_CATALOG_FAILURE_STAGE='+str(stage if stage in ('outbound_fetch','catalog_json') else 'none'))
+          print('NVIDIA_CATALOG_FAILURE_KIND='+str(kind if kind in ('timeout','aborted','abort_api_unavailable','redirect_rejected','fetch_type_error','runtime_type_error','other_runtime_exception') else 'none'))
           print('NVIDIA_COMPLETION_RESPONSE_VALID='+str(v.get('completion_response_valid') is True).lower())
           print('NVIDIA_PROVIDER_RAW_CONTENT_EXPORTED=false')
           print('NVIDIA_PRIVATE_SECRET_VALUE_EXPORTED=false')
