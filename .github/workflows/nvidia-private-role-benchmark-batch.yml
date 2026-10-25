@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 247bd59d12b7e899198949c40ccbdd2d5f3a0557
+          ref: a3c18f808b7f393410380009908ac65b92f9d1c3
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -29,13 +29,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C approved-source rev-parse HEAD)" = "247bd59d12b7e899198949c40ccbdd2d5f3a0557"
+          test "$(git -C approved-source rev-parse HEAD)" = "a3c18f808b7f393410380009908ac65b92f9d1c3"
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           python - <<'PY'
           import re
           from pathlib import Path
           raw=Path('ops/nvidia_role_batch_trigger.txt').read_text().strip()
-          if re.fullmatch(r'batch=(-1|[0-9]|[1-9][0-9])',raw):
+          if re.fullmatch(r'batch=(-2|-1|[0-9]|[1-9][0-9])',raw):
               selected=[int(raw.split('=')[1])]
           else:
               match=re.fullmatch(r'range=([0-9]|[1-9][0-9]):([1-5])',raw)
@@ -59,7 +59,7 @@ jobs:
         working-directory: approved-source/cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "247bd59d12b7e899198949c40ccbdd2d5f3a0557"
+          test "$(git rev-parse HEAD)" = "a3c18f808b7f393410380009908ac65b92f9d1c3"
           export CI=true
           npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_role_local_caller.log" 2>&1 &
           pid=$!
@@ -77,7 +77,7 @@ jobs:
           from urllib.request import Request,urlopen
           from urllib.error import HTTPError
           raw=(Path(os.environ['GITHUB_WORKSPACE'])/'ops/nvidia_role_batch_trigger.txt').read_text().strip()
-          if re.fullmatch(r'batch=(-1|[0-9]|[1-9][0-9])',raw):
+          if re.fullmatch(r'batch=(-2|-1|[0-9]|[1-9][0-9])',raw):
               batches=[int(raw.split('=')[1])]
           else:
               m=re.fullmatch(r'range=([0-9]|[1-9][0-9]):([1-5])',raw)
@@ -116,7 +116,7 @@ jobs:
                   if not isinstance(model,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{2,80}/[A-Za-z0-9_.:-]{2,120}',model):
                       raise SystemExit('ROLE_MODEL_IDENTIFIER_INVALID')
                   for task in item.get('results') or []:
-                      if task.get('task') not in ('logic','json','math','tool_call'):
+                      if task.get('task') not in ('logic','json','math','tool_call','vision'):
                           raise SystemExit('ROLE_TASK_INVALID')
                       print('NVIDIA_ROLE_OBSERVATION='+json.dumps({
                         'model':model,'task':task['task'],'http':task.get('http_status'),
