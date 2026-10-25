@@ -6,6 +6,7 @@ on:
   workflow_run:
     workflows:
       - "NVIDIA Private Fixed Catalog and Completion (One Shot)"
+      - "NVIDIA Private Synthetic Role Batch (existing Service Binding)"
     types: [completed]
 permissions:
   contents: read
