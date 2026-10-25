@@ -1,5 +1,8 @@
 name: NVIDIA Private Diagnostic Recovery Guardian
 on:
+  push:
+    branches: [main]
+    paths: ['ops/nvidia_private_diagnostic_restore_once.txt']
   workflow_run:
     workflows:
       - "NVIDIA Private Fixed Catalog and Completion (One Shot)"
