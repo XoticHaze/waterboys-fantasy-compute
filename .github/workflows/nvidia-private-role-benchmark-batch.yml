@@ -1,0 +1,127 @@
+name: NVIDIA Private Synthetic Role Batch (existing Service Binding)
+on:
+  push:
+    branches: [main]
+    paths: ['ops/nvidia_role_batch_trigger.txt']
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  synthetic-roles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 76e75335ff621e07c6dcfe5f3312650adeb40fff
+          path: approved-source
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Validate approved exact benchmark and selector
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C approved-source rev-parse HEAD)" = "76e75335ff621e07c6dcfe5f3312650adeb40fff"
+          (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          raw=Path('ops/nvidia_role_batch_trigger.txt').read_text().strip()
+          if not re.fullmatch(r'batch=(-1|[0-9]|[1-9][0-9])',raw):
+              raise SystemExit('ROLE_BATCH_SELECTOR_NOT_ALLOWED')
+          print('PRIVATE_SYNTHETIC_ROLE_BATCH='+raw.partition('=')[2])
+          print('ROLE_MAX_PROVIDER_REQUESTS=9')
+          print('ROLE_PAYLOAD_PRIVATE_DATA=false')
+          PY
+      - name: Admit fixed Worker diagnostics temporarily with binding-preserving readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py enable
+      - name: Execute one bounded existing private Service Binding role batch
+        shell: bash
+        working-directory: approved-source/cloudflare/shared-nvidia-inference
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "76e75335ff621e07c6dcfe5f3312650adeb40fff"
+          export CI=true
+          npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_role_local_caller.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 40); do
+            if curl -s --max-time 2 http://127.0.0.1:8787/ -o /dev/null; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then echo 'NVIDIA_PRIVATE_SERVICE_CALLER=UNAVAILABLE'; exit 1; fi
+          python - <<'PY'
+          import json,re,os
+          from pathlib import Path
+          root=Path('../../../../ops/nvidia_role_batch_trigger.txt')
+          # The selected source checkout is isolated; operator request lives in caller checkout.
+          root=Path(os.environ['GITHUB_WORKSPACE'])/'ops/nvidia_role_batch_trigger.txt'
+          raw=root.read_text().strip()
+          if not re.fullmatch(r'batch=(-1|[0-9]|[1-9][0-9])',raw):
+              raise SystemExit('INVALID_OPERATOR_ROLE_SELECTOR')
+          selected=int(raw.split('=')[1])
+          (Path(os.environ['RUNNER_TEMP'])/'nvidia_role_request.json').write_text(json.dumps({'batch':selected},separators=(',',':')))
+          PY
+          curl --silent --show-error --max-time 235 -X POST -H 'Content-Type: application/json' \
+             --data-binary @"$RUNNER_TEMP/nvidia_role_request.json" \
+             -o "$RUNNER_TEMP/nvidia_role_response.json" \
+             -w '%{http_code}' http://127.0.0.1:8787/roles-batch > "$RUNNER_TEMP/nvidia_role_http.txt"
+          python - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          tmp=Path(os.environ['RUNNER_TEMP'])
+          code=(tmp/'nvidia_role_http.txt').read_text().strip()
+          try: doc=json.loads((tmp/'nvidia_role_response.json').read_text())
+          except (ValueError,UnicodeError): raise SystemExit('ROLE_RECEIPT_INVALID')
+          if doc.get('schema')!='commandcenter.nvidia_synthetic_roles.v1':
+              raise SystemExit('ROLE_RECEIPT_CONTRACT_INVALID')
+          count=doc.get('calls')
+          if type(count)!=int or not 0<=count<=9:
+              raise SystemExit('ROLE_PROVIDER_BUDGET_INVALID')
+          print('NVIDIA_ROLE_CATALOG_HTTP='+str(doc.get('catalog_http')))
+          print('NVIDIA_ROLE_CATALOG_COUNT='+str(doc.get('catalog_count')))
+          print('NVIDIA_ROLE_ELIGIBLE_COUNT='+str(doc.get('eligible_count')))
+          print('NVIDIA_ROLE_BATCH='+str(doc.get('batch')))
+          print('NVIDIA_ROLE_STATUS='+str(doc.get('status')))
+          print('NVIDIA_ROLE_PROVIDER_CALLS='+str(count))
+          print('NVIDIA_ROLE_ELAPSED_MS='+str(doc.get('elapsed_ms')))
+          for i,item in enumerate(doc.get('results') or []):
+              model=item.get('model')
+              if not isinstance(model,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{2,80}/[A-Za-z0-9_.:-]{2,120}',model):
+                  raise SystemExit('ROLE_MODEL_IDENTIFIER_INVALID')
+              for test in item.get('results') or []:
+                  task=test.get('task')
+                  if task not in ('logic','json','math','tool_call'):
+                      raise SystemExit('ROLE_TASK_INVALID')
+                  print('NVIDIA_ROLE_OBSERVATION='+json.dumps({
+                    'model':model,'task':task,'http':test.get('http_status'),
+                    'latency_ms':test.get('latency_ms'),'passed':test.get('passed'),
+                    'format_valid':test.get('format_valid'),'error':test.get('error')
+                  },sort_keys=True,separators=(',',':')))
+          print('NVIDIA_ROLE_RAW_ANSWERS_EXPORTED=false')
+          print('NVIDIA_ROLE_HOUSEHOLD_DATA_EXPORTED=false')
+          print('NVIDIA_ROLE_KEY_EXPORTED=false')
+          if code!='200' or doc.get('status') not in ('catalog_only','batch_complete','end_of_catalog'):
+              raise SystemExit('ROLE_BATCH_DID_NOT_COMPLETE')
+          print('NVIDIA_ROLE_BATCH_COMPLETED=PASS')
+          PY
+      - name: Always restore Worker diagnostic off, preserve NVIDIA secret
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py restore
+          echo 'NVIDIA_ROLE_DIAGNOSTIC_RESTORED=PASS'
