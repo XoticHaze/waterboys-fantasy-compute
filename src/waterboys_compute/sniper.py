@@ -488,6 +488,54 @@ def _pending_rows(snapshot: dict) -> list[dict]:
     return rows
 
 
+def acquisition_roster_blocker(snapshot: dict) -> dict | None:
+    """Detect ESPN's hard acquisition block caused by a healthy IR occupant.
+
+    This is a roster-maintenance issue, not a player-value or bid issue.
+    A separate approved roster release may be needed before activation.
+    """
+    roster = (snapshot.get("waterboys") or {}).get("roster") or []
+    invalid_ir = [
+        player for player in roster
+        if str(player.get("lineup_slot") or "").upper() == "IR"
+        and str(player.get("injury_status") or "").upper()
+        not in {"OUT", "INJURY_RESERVE", "IR", "QUESTIONABLE", "DOUBTFUL"}
+    ]
+    if not invalid_ir:
+        return None
+
+    active_count = sum(
+        1 for player in roster if str(player.get("lineup_slot") or "").upper() != "IR"
+    )
+    limit = int(
+        (((snapshot.get("league") or {}).get("roster") or {}).get("size") or 0)
+    )
+    full = limit > 0 and active_count >= limit
+    return {
+        "code": "healthy_player_in_ir",
+        "players": [
+            {
+                "player_id": player.get("player_id"),
+                "name": player.get("name"),
+                "injury_status": player.get("injury_status"),
+            }
+            for player in invalid_ir
+        ],
+        "active_roster_count": active_count,
+        "active_roster_limit": limit or None,
+        "requires_active_roster_release": full,
+        "message": (
+            "ESPN blocks all new waiver claims and free-agent additions until "
+            "the healthy IR occupant is activated. "
+            + (
+                "The active roster is full, so a separate approved release "
+                "is required before activation."
+                if full else "An active roster spot is available for activation."
+            )
+        ),
+    }
+
+
 def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = None) -> dict:
     rows = list(((snapshot.get("value_engine") or {}).get("waiver_targets") or []))
     evaluations = [evaluate_candidate(row, snapshot, policy, previous_report) for row in rows]
@@ -537,10 +585,25 @@ def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = Non
         reverse=True,
     )
 
+    blocker = acquisition_roster_blocker(snapshot)
+    # Keep genuine player values and pending-claim cancellation/repricing visible,
+    # but do not submit new additions that ESPN will reject while IR is invalid.
+    blocked_acquisition_opportunities = [
+        {
+            "player_id": row.get("player_id"),
+            "name": row.get("name"),
+            "action": row.get("action"),
+            "selected_bid": row.get("selected_bid"),
+            "risk_adjusted_marginal_ppg": row.get("risk_adjusted_marginal_ppg"),
+            "estimated_rank_gain": row.get("estimated_rank_gain"),
+        }
+        for row in eligible[:5]
+    ] if blocker else []
+
     max_actions = int(policy.get("max_actions_per_run") or 1)
     selected = []
     free_agent_selected = False
-    for row in eligible:
+    for row in ([] if blocker else eligible):
         if len(selected) >= max_actions:
             break
         if row.get("action") == "free_agent_add":
@@ -571,6 +634,8 @@ def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = Non
         "enabled": policy.get("enabled") is True,
         "cancel_actions": cancel_actions,
         "selected": selected,
+        "acquisition_roster_blocker": blocker,
+        "blocked_acquisition_opportunities": blocked_acquisition_opportunities,
         "top_evaluations": evaluations[:50],
         "observations": observations,
     }
