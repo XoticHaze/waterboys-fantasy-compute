@@ -396,7 +396,7 @@ class ContractTests(unittest.TestCase):
             "dry_run": True,
         }
         body = build_transaction(runtime, command, fresh)
-        self.assertEqual(body["type"], "FREEAGENT")
+        self.assertEqual(body["type"], "ROSTER")
         self.assertEqual(body["items"], [
             {"playerId": -16020, "type": "DROP", "fromTeamId": 18}
         ])
