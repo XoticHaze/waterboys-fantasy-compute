@@ -133,7 +133,7 @@ def build_transaction(runtime: dict, command: dict, fresh: dict) -> dict:
         player_id = command.get("player_id")
         if not isinstance(player_id, int):
             raise RuntimeError("free_agent_drop requires integer player_id")
-        base["type"] = "FREEAGENT"
+        base["type"] = "ROSTER"
         base["items"] = [
             {"playerId": player_id, "type": "DROP", "fromTeamId": team_id}
         ]
