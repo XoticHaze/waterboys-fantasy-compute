@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "snapshot",
-  "nonce": "2026-10-22-pr21-bounded-premium-brief-8ac93b72",
-  "reason": "Validate compact private brief readback and new premium auction intelligence after deploy"
+  "nonce": "2026-10-27-week8-reground-ir-waiver-01",
+  "reason": "Week 7 final result, Week 8 ESPN roster and IR eligibility, FAAB and waiver decisions before any live actions"
 }
