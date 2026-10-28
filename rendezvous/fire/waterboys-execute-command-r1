@@ -1,6 +1,6 @@
 {
   "schema": "waterboys.fire.v1",
   "action": "execute_command",
-  "nonce": "2026-10-28-kincaid-roster-drop-second-canary-02",
-  "reason": "Run exact action-scoped user-approved Kincaid release with corrected ESPN ROSTER transaction"
+  "nonce": "2026-10-28-activate-jordan-mason-01",
+  "reason": "Activate Jordan Mason from IR to BE after verified Kincaid drop using proven lineup move"
 }
