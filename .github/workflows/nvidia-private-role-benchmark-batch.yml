@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: a3c18f808b7f393410380009908ac65b92f9d1c3
+          ref: 5ea8b3c5619e4a86016412de9c2d52c78521cacd
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -29,8 +29,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C approved-source rev-parse HEAD)" = "a3c18f808b7f393410380009908ac65b92f9d1c3"
+          test "$(git -C approved-source rev-parse HEAD)" = "5ea8b3c5619e4a86016412de9c2d52c78521cacd"
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
+          node --check approved-source/cloudflare/shared-nvidia-inference/src/provider_pacing_queue.js
           python -m py_compile scripts/nvidia_role_full_catalog_campaign.py
           python -m unittest discover -s tests -p 'test_nvidia_full_catalog_campaign.py' -v
           python - <<'PY'
@@ -67,7 +68,7 @@ jobs:
         working-directory: approved-source/cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "a3c18f808b7f393410380009908ac65b92f9d1c3"
+          test "$(git rev-parse HEAD)" = "5ea8b3c5619e4a86016412de9c2d52c78521cacd"
           export CI=true
           if [ "$(tr -d '\\r\\n' < "$GITHUB_WORKSPACE/ops/nvidia_role_batch_trigger.txt")" = "all" ]; then
             python "$GITHUB_WORKSPACE/scripts/nvidia_role_full_catalog_campaign.py"
