@@ -1,0 +1,66 @@
+name: NVIDIA Fixed Micro-Worker Poolside MiniMax Evaluation
+on:
+  push:
+    branches: [main]
+    paths: ['ops/nvidia_micro_worker_trigger.txt']
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  two-model-synthetic-micro:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 954b0e90c5490713e749758ebb63d2170da58a82
+          path: approved-source
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify exact fixed source, safe selector and offline harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C approved-source rev-parse HEAD)" = "954b0e90c5490713e749758ebb63d2170da58a82"
+          test "$(cat ops/nvidia_micro_worker_trigger.txt)" = 'micro=both'
+          (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
+          python -m py_compile scripts/nvidia_micro_worker_campaign.py
+          node --check approved-source/cloudflare/shared-nvidia-inference/src/micro_worker_benchmark.js
+          node --check approved-source/cloudflare/shared-nvidia-inference/local-probe/src/index.js
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const cfg=JSON.parse(fs.readFileSync('approved-source/cloudflare/shared-nvidia-inference/wrangler.jsonc','utf8'));
+          assert.equal(cfg.name,'cc-shared-nvidia-inference');
+          assert.equal(cfg.workers_dev,false);
+          assert.equal(cfg.preview_urls,false);
+          assert.equal(cfg.vars.CC_NVIDIA_DIAGNOSTIC_ENABLED,'0');
+          console.log('MICRO_PRIVATE_ONLY_CONFIG=PASS');
+          JS
+      - name: Temporarily admit reviewed fixed synthetic diagnostic without altering credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py enable
+      - name: Execute both models across all 24 synthetic decision cases
+        working-directory: approved-source/cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CI=true
+          python "$GITHUB_WORKSPACE/scripts/nvidia_micro_worker_campaign.py"
+      - name: Always restore disabled Cloudflare diagnostic and original secret binding
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py restore
+          echo 'NVIDIA_MICRO_DIAGNOSTIC_RESTORED=PASS'
