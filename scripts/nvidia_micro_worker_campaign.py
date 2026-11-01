@@ -77,6 +77,8 @@ def validate(doc,mi,bi):
             "http":code,"latency_ms":latency,
             "format_valid":row.get("format_valid") is True,
             "passed":row.get("passed") is True,
+            "observed_action":row.get("observed_action") if row.get("observed_action") in {"investigate","observe","deduplicate","retry","escalate","hold","complete","route","ignore","extend","reject","draft","redact","call","clarify"} else None,
+            "observed_route":row.get("observed_route") if row.get("observed_route") in {"receipts","none","queue","operator","public_compute","haos","untrusted","source_pr","human_review","read_status"} else None,
             "error":row.get("error"),
         })
     return output
