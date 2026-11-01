@@ -26,7 +26,8 @@ def read_checkpoint(path=CHECKPOINT):
     doc=json.loads(Path(path).read_text(encoding="utf-8"))
     source=doc.get("source") or {}
     rows=doc.get("completed_cases") or []
-    if (doc.get("schema")!="commandcenter.nvidia_minimax_fixed_synthetic_checkpoint.v1"
+    if (not isinstance(source,dict) or not isinstance(rows,list)
+        or doc.get("schema")!="commandcenter.nvidia_minimax_fixed_synthetic_checkpoint.v1"
         or doc.get("model")!=MODELS[1]
         or doc.get("status")!="INCOMPLETE_AFTER_PROVIDER_HTTP_429_NO_AUTO_RETRY"
         or source.get("run")!=EXPECTED_RUN or source.get("worker_source_sha")!=EXPECTED_SOURCE
@@ -35,7 +36,7 @@ def read_checkpoint(path=CHECKPOINT):
         or doc.get("complete_cases")!=8 or doc.get("format_valid_cases")!=8
         or doc.get("http_200_cases")!=8
         or [r.get("case") for r in rows]!=EXPECTED_CASES
-        or any(type(r.get("passed"))!=bool or set(r)!={"case","passed"} for r in rows)
+        or any(not isinstance(r,dict) or type(r.get("passed"))!=bool or set(r)!={"case","passed"} for r in rows)
         or doc.get("raw_model_output_included") is not False
         or doc.get("private_data_included") is not False
         or doc.get("credentials_included") is not False
