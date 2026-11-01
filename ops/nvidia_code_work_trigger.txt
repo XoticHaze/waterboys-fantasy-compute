@@ -1,1 +1,1 @@
-code=poolside
+code=minimax
