@@ -1,5 +1,7 @@
 """Offline, zero-provider verification of the strict AST-only code review."""
 import unittest
+import io
+import contextlib
 import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
@@ -46,6 +48,20 @@ class CodeRepairTests(unittest.TestCase):
       w.validate_receipt({**receipt,"model":"other"},0)
     with self.assertRaisesRegex(RuntimeError,"429"):
       w.validate_receipt({**receipt,"status":"rate_limited","http_status":429,"code":None},0)
+ def test_safe_status_logs_only_reviewed_classification_and_no_code(self):
+    rec={"schema":"commandcenter.nvidia_fixed_code_repair.v1",
+         "model_index":1,"model":w.MODELS[1],
+         "task_id":"RETRY_DEADLINE_01","provider_calls":1,
+         "status":"candidate_format_rejected","http_status":200,
+         "code":"DO_NOT_LEAK_PRIVATE_MODEL_BODY"}
+    out=io.StringIO()
+    with contextlib.redirect_stdout(out):
+     with self.assertRaisesRegex(RuntimeError,"NOT_ADMITTED"):
+      w.validate_receipt(rec,1)
+    self.assertIn("NVIDIA_CODE_REPAIR_SAFE_GATE=",out.getvalue())
+    self.assertIn("candidate_format_rejected",out.getvalue())
+    self.assertNotIn("DO_NOT_LEAK",out.getvalue())
+
  def test_no_arbitrary_code_execution_or_infinite_growth(self):
     code="""def retry_delay_ms(attempt, max_attempts, base_ms, cap_ms):
     return 1000 ** 100
