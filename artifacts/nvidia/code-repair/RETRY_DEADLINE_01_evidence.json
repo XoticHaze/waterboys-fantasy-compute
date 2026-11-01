@@ -1,0 +1,45 @@
+{
+  "schema": "commandcenter.nvidia_fixed_code_repair_evidence.v1",
+  "task_id": "RETRY_DEADLINE_01",
+  "source_fixture_revision": "367b4cb5461cf5082ae5abf6212c51a111a5035b",
+  "task": "Repair a fictional Python retry schedule: one-based attempt, deadline exhaustion, invalid input guard, capped exponential backoff",
+  "execution": "Existing private Cloudflare Service Binding via public-encrypted synthetic compute",
+  "models": [
+    {
+      "model": "poolside/laguna-xs-2.1",
+      "run_id": 41363140573,
+      "job_id": 125017602834,
+      "provider_calls": 1,
+      "http_status": 200,
+      "latency_ms": 3020,
+      "candidate_admitted": true,
+      "behavioral_tests_passed": 23,
+      "behavioral_tests_total": 23,
+      "code_executed": false,
+      "real_repo_mutated": false,
+      "verified_source_path": "artifacts/nvidia/code-repair/RETRY_DEADLINE_01_poolside.py",
+      "diagnostic_restored_disabled": true
+    },
+    {
+      "model": "minimaxai/minimax-m3.1-flash",
+      "run_id": 41363215266,
+      "job_id": 125017828581,
+      "provider_calls_reserved": 1,
+      "provider_result": "NO_ADMITTED_CODE_CANDIDATE",
+      "root_failure_classification": "NOT_EXPOSED_BY_EXISTING_SAFE_RECEIPT",
+      "workflow_conclusion": "failure",
+      "auto_retry": false,
+      "behavioral_tests_executed": 0,
+      "diagnostic_restored_disabled": true
+    }
+  ],
+  "limitations": [
+    "Only one coding task and one attempt per model; not production reliability",
+    "Source is fictional public synthetic code, not a real CommandCenter project patch",
+    "Independent tests use an allowlisted AST interpreter rather than executing arbitrary generated code",
+    "The model cannot access or mutate real repository files, user content, execution queues, devices, trading accounts or credentials",
+    "Per-isolate NVIDIA 40 RPM soft limiter is not an account-wide quota guarantee"
+  ],
+  "next_milestone": "Qualify a diverse set of bounded code repair tasks and return reviewed source artifacts through an admitted typed work/result route; prevent one passing test from automatically activating a model role.",
+  "production_activation": false
+}
