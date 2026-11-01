@@ -32,6 +32,7 @@ jobs:
           test "$(git -C approved-source rev-parse HEAD)" = "a3c18f808b7f393410380009908ac65b92f9d1c3"
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           python -m py_compile scripts/nvidia_role_full_catalog_campaign.py
+          python -m unittest discover -s tests -p 'test_nvidia_full_catalog_campaign.py' -v
           python - <<'PY'
           import re
           from pathlib import Path
