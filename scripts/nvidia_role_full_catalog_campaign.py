@@ -94,6 +94,12 @@ def validated_batch(doc: object, batch: int, expected_ids: list[str] | None):
     return calls, ids, observations
 
 
+class TemporaryBatchFailure(RuntimeError):
+    def __init__(self, category: str, cooldown: int = 10):
+        super().__init__(category)
+        self.cooldown = cooldown
+
+
 def invoke(batch: int) -> dict:
     body = json.dumps({"batch": batch}, separators=(",", ":")).encode()
     request = Request(
@@ -106,13 +112,25 @@ def invoke(batch: int) -> dict:
     except HTTPError as exc:
         code, payload = exc.code, exc.read(85000)
     except (URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError("PRIVATE_SERVICE_BINDING_UNAVAILABLE") from exc
+        raise TemporaryBatchFailure("PRIVATE_SERVICE_BINDING_TRANSIENT") from exc
     try:
         receipt = json.loads(payload)
     except (ValueError, UnicodeError) as exc:
-        raise RuntimeError("INVALID_UPSTREAM_JSON") from exc
+        raise TemporaryBatchFailure("INVALID_UPSTREAM_JSON") from exc
+    # Only expose fixed classifications, never model responses, headers or keys.
+    if not isinstance(receipt, dict):
+        raise TemporaryBatchFailure("INVALID_UPSTREAM_RECEIPT")
+    status = receipt.get("status")
+    if status == "account_auth_rejected":
+        raise RuntimeError("PROVIDER_ACCOUNT_AUTH_HOLD")
+    if status == "rate_limited":
+        raise TemporaryBatchFailure("PROVIDER_RATE_LIMIT", cooldown=90)
+    if status in ("catalog_http_error", "catalog_decode_error", "limit_reached"):
+        raise TemporaryBatchFailure("PROVIDER_BOUNDED_RETRY", cooldown=30)
     if code != 200:
-        raise RuntimeError("BATCH_PROVIDER_RECEIPT_REJECTED")
+        raise TemporaryBatchFailure("PRIVATE_SERVICE_RESPONSE_TRANSIENT", cooldown=15)
+    if status != "batch_complete":
+        raise RuntimeError("INVALID_SUCCESSFUL_BATCH_STATUS")
     return receipt
 
 
@@ -179,6 +197,8 @@ def close_caller(process) -> None:
 def main() -> int:
     start = time.monotonic()
     observed_calls = 0
+    reserved_calls = 0
+    retry_counts = {}
     model_ids = None
     tested_models = set()
     task_rows = []
@@ -192,6 +212,7 @@ def main() -> int:
     while batch < MAX_CATALOG_BATCHES:
         check_time(start)
         process = open_caller(log_dir / "nvidia_full_catalog_local_caller.log")
+        retry_delay = 0
         try:
             for _ in range(CALLER_MAX_BATCHES):
                 if model_ids is not None and batch * MODELS_PER_BATCH >= len(model_ids):
@@ -199,9 +220,24 @@ def main() -> int:
                 check_time(start)
                 # Reserve maximum possible requests BEFORE each batch, including
                 # a catalog GET and calls that fail without a returned receipt.
-                if observed_calls + CALLS_PER_BATCH_HARD_MAX > MAX_API_CALLS_PER_RUN:
+                if reserved_calls + CALLS_PER_BATCH_HARD_MAX > MAX_API_CALLS_PER_RUN:
                     raise RuntimeError("CAMPAIGN_4000_REQUEST_CEILING_REACHED")
-                receipt = invoke(batch)
+                # Pessimistic reservation accounts for requests even when a
+                # transport failure prevents us from receiving its receipt.
+                reserved_calls += CALLS_PER_BATCH_HARD_MAX
+                try:
+                    receipt = invoke(batch)
+                except TemporaryBatchFailure as exc:
+                    retry_counts[batch] = retry_counts.get(batch, 0) + 1
+                    if retry_counts[batch] > 3:
+                        raise RuntimeError("RETRY_LIMIT_EXHAUSTED_BATCH_" + str(batch)) from exc
+                    retry_delay = min(180, exc.cooldown * retry_counts[batch])
+                    print("NVIDIA_CAMPAIGN_RETRY=" + json.dumps({
+                        "batch": batch, "category": str(exc),
+                        "retry": retry_counts[batch], "seconds": retry_delay,
+                        "pessimistic_call_reservation": reserved_calls,
+                    }, sort_keys=True, separators=(",", ":")), flush=True)
+                    break
                 count, ids, observations = validated_batch(receipt, batch, model_ids)
                 if model_ids is None:
                     model_ids = ids
@@ -218,20 +254,26 @@ def main() -> int:
                 batch += 1
         finally:
             close_caller(process)
+        if retry_delay:
+            check_time(start)
+            time.sleep(retry_delay)
+            continue
         if model_ids is not None and len(tested_models) == len(model_ids):
             if tested_models != set(model_ids):
                 raise RuntimeError("CATALOG_COVERAGE_IDENTITY_MISMATCH")
             break
     if model_ids is None or len(tested_models) != len(model_ids):
         raise RuntimeError("FULL_CATALOG_INCOMPLETE")
-    if observed_calls > MAX_API_CALLS_PER_RUN or time.monotonic() - start >= MAX_WINDOW_SECONDS:
+    if reserved_calls > MAX_API_CALLS_PER_RUN or time.monotonic() - start >= MAX_WINDOW_SECONDS:
         raise RuntimeError("CAMPAIGN_CEILING_BREACHED")
     summary = {
         "schema": "commandcenter.nvidia_full_catalog_synthetic_summary.v1",
         "eligible_models": len(model_ids),
         "attempted_models": len(tested_models),
         "batches": batch,
-        "api_calls": observed_calls,
+        "api_calls_receipted": observed_calls,
+        "api_calls_max_possible_reserved": reserved_calls,
+        "transient_retries": sum(retry_counts.values()),
         "request_ceiling": MAX_API_CALLS_PER_RUN,
         "window_seconds": MAX_WINDOW_SECONDS,
         "elapsed_seconds": int(time.monotonic() - start),
