@@ -33,6 +33,7 @@ jobs:
           test "$(cat ops/nvidia_micro_worker_trigger.txt)" = 'micro=both'
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           python -m py_compile scripts/nvidia_micro_worker_campaign.py
+          python -m unittest discover -s tests -p 'test_nvidia_micro_worker_campaign.py' -v
           node --check approved-source/cloudflare/shared-nvidia-inference/src/micro_worker_benchmark.js
           node --check approved-source/cloudflare/shared-nvidia-inference/local-probe/src/index.js
           node --input-type=module - <<'JS'
