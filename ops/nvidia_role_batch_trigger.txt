@@ -1,1 +1,1 @@
-all
+batch=16
