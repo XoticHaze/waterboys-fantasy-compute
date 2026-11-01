@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -115,9 +116,25 @@ def invoke(batch: int) -> dict:
     return receipt
 
 
+def caller_port_occupied() -> bool:
+    try:
+        with urlopen("http://127.0.0.1:8787/", timeout=2):
+            return True
+    except HTTPError:
+        return True
+    except (URLError, TimeoutError, OSError):
+        return False
+
+
 def open_caller(log_path: Path):
+    if caller_port_occupied():
+        raise RuntimeError("CALLER_PORT_OCCUPIED_BEFORE_LAUNCH")
     with log_path.open("ab") as log:
-        process = subprocess.Popen(CALLER_CMD, stdout=log, stderr=subprocess.STDOUT)
+        # npx spawns workerd children; terminate the entire process group.
+        process = subprocess.Popen(
+            CALLER_CMD, stdout=log, stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
     try:
         for _ in range(45):
             if process.poll() is not None:
@@ -138,14 +155,25 @@ def open_caller(log_path: Path):
 
 
 def close_caller(process) -> None:
-    if process.poll() is not None:
-        return
-    process.terminate()
+    # Kill every npx/wrangler/workerd descendant, not only the npm parent.
+    # Otherwise batch 6 reaches the old five-batch caller and gets HTTP 409.
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
-        process.kill()
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         process.wait(timeout=5)
+    for _ in range(25):
+        if not caller_port_occupied():
+            return
+        time.sleep(0.2)
+    raise RuntimeError("EPHEMERAL_CALLER_PORT_NOT_RELEASED")
 
 
 def main() -> int:

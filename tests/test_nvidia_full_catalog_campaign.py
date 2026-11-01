@@ -79,6 +79,25 @@ class FullCatalogCampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "UNEXPECTED_TASK"):
             mod.validated_batch(doc, 0, self.ids)
 
+    def test_rotating_caller_terminates_process_group(self):
+        from unittest.mock import Mock
+        process = Mock()
+        process.pid = 4242
+        with (patch.object(mod.os, "killpg") as kill,
+              patch.object(mod, "caller_port_occupied", return_value=False)):
+            mod.close_caller(process)
+        kill.assert_called_once_with(4242, mod.signal.SIGTERM)
+
+    def test_orphan_caller_port_causes_fail_closed(self):
+        from unittest.mock import Mock
+        process = Mock()
+        process.pid = 4242
+        with (patch.object(mod.os, "killpg"),
+              patch.object(mod, "caller_port_occupied", return_value=True),
+              patch.object(mod.time, "sleep")):
+            with self.assertRaisesRegex(RuntimeError, "PORT_NOT_RELEASED"):
+                mod.close_caller(process)
+
     def test_duplicate_catalog_ids_fails_closed(self):
         doc = fake_doc(0, self.ids)
         doc["eligible_model_ids"][1] = doc["eligible_model_ids"][0]
