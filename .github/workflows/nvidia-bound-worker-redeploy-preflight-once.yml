@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: d86ed0b9417b590d44ed159badb6e0e114c54278
+          ref: 5a129398578512c32256cced50175706faaeca7c
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -30,12 +30,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "d86ed0b9417b590d44ed159badb6e0e114c54278"
+          test "$(git rev-parse HEAD)" = "5a129398578512c32256cced50175706faaeca7c"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
           node --check src/micro_worker_fixtures.js
           node --check src/micro_worker_benchmark.js
+          node --check src/draft_pilot_runner.js
+          node --check src/draft_pilot_fixtures.js
+          node --check local-probe/src/draft_receipt.js
           node --check local-probe/src/index.js
           node --check local-probe/src/micro_receipt.js
       - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
