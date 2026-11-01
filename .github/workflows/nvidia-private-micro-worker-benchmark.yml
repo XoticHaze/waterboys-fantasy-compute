@@ -40,6 +40,7 @@ jobs:
           python -m py_compile scripts/nvidia_micro_worker_enum_diagnostic.py
           python -m py_compile scripts/nvidia_micro_worker_primary_only.py
           python -m unittest discover -s tests -p 'test_nvidia_micro_worker_campaign.py' -v
+          python -m unittest discover -s tests -p 'test_nvidia_micro_worker_primary_only.py' -v
           node --check approved-source/cloudflare/shared-nvidia-inference/src/micro_worker_benchmark.js
           node --check approved-source/cloudflare/shared-nvidia-inference/src/provider_pacing_queue.js
           node --check approved-source/cloudflare/shared-nvidia-inference/local-probe/src/index.js
