@@ -43,6 +43,37 @@ class PoolsidePrimaryOnlyTests(unittest.TestCase):
   self.assertEqual(called.call_count,1)
   self.assertIn("NVIDIA_PRIMARY_HELD=PROVIDER_RATE_LIMIT",out.getvalue())
 
+ def test_minimax_fallback_uses_only_fixed_model_1_and_full_24_cases(self):
+  docs=[receipt(1,i) for i in range(6)]
+  out=io.StringIO()
+  with (patch.object(primary,"open_caller",return_value=object()),
+        patch.object(primary,"close_caller"),
+        patch.object(primary,"call",side_effect=docs) as invoked,
+        contextlib.redirect_stdout(out)):
+   primary.main(model_index=1)
+  self.assertEqual(invoked.call_count,6)
+  self.assertTrue(all(c.args[0]==1 for c in invoked.call_args_list))
+  summary=json.loads(next(line.split("=",1)[1] for line in out.getvalue().splitlines()
+       if line.startswith("NVIDIA_FALLBACK_SHADOW_SUMMARY=")))
+  self.assertEqual(summary["model"],"minimaxai/minimax-m3.1-flash")
+  self.assertEqual(summary["attempted"],24)
+  self.assertEqual(summary["limit_provider_calls"],24)
+  self.assertFalse(summary["production_activation"])
+
+ def test_fallback_first_429_holds_with_no_retry(self):
+  out=io.StringIO()
+  with (patch.object(primary,"open_caller",return_value=object()),
+        patch.object(primary,"close_caller"),
+        patch.object(primary,"call",side_effect=Retryable("PROVIDER_RATE_LIMIT")) as invoked,
+        contextlib.redirect_stdout(out)):
+   with self.assertRaisesRegex(RuntimeError,"NVIDIA_FALLBACK_PROVIDER_HELD_NO_AUTORETRY"):
+    primary.main(model_index=1)
+  self.assertEqual(invoked.call_count,1)
+
+ def test_invalid_model_selection_rejected_before_private_caller(self):
+  with self.assertRaisesRegex(RuntimeError,"INVALID_FIXED_MICRO_MODEL_SELECTOR"):
+   primary.main(model_index=2)
+
  def test_malformed_model_or_case_receipt_fails_closed(self):
   doc=receipt(1,0)
   with (patch.object(primary,"open_caller",return_value=object()),
