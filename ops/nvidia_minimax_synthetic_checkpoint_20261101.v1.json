@@ -1,0 +1,62 @@
+{
+  "schema": "commandcenter.nvidia_minimax_fixed_synthetic_checkpoint.v1",
+  "created_for": "fixed_private_service_binding_24case_qualification",
+  "source": {
+    "run": 41353813429,
+    "job": 124989467647,
+    "workflow_commit": "88ee45bdd67fd5e6ba9a8af6eadd3106623b53a9",
+    "worker_source_sha": "d86ed0b9417b590d44ed159badb6e0e114c54278"
+  },
+  "model": "minimaxai/minimax-m3.1-flash",
+  "status": "INCOMPLETE_AFTER_PROVIDER_HTTP_429_NO_AUTO_RETRY",
+  "completed_batch_indices": [
+    0,
+    1
+  ],
+  "next_eligible_batch_index": 2,
+  "completed_cases": [
+    {
+      "case": "T01",
+      "passed": true
+    },
+    {
+      "case": "T02",
+      "passed": true
+    },
+    {
+      "case": "T03",
+      "passed": true
+    },
+    {
+      "case": "T04",
+      "passed": true
+    },
+    {
+      "case": "R01",
+      "passed": true
+    },
+    {
+      "case": "R02",
+      "passed": true
+    },
+    {
+      "case": "R03",
+      "passed": true
+    },
+    {
+      "case": "R04",
+      "passed": false
+    }
+  ],
+  "complete_cases": 8,
+  "format_valid_cases": 8,
+  "http_200_cases": 8,
+  "estimated_next_batch_provider_calls": 4,
+  "prior_pessimistic_provider_budget_up_to": 12,
+  "raw_model_output_included": false,
+  "private_data_included": false,
+  "credentials_included": false,
+  "production_activation": false,
+  "diagnostic_flag_restored_0": true,
+  "continuation_rule": "Only resume at exact first untested fixed synthetic batch 2. Never rerun completed batch 0/1. Preserve no-retry after 429, 3RPS per-isolate burst ceiling and quota cooldown; no automatic release on checkpoint alone."
+}
