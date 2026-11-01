@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import sys
 from pathlib import Path
 from urllib.error import HTTPError,URLError
 from urllib.request import Request,urlopen
@@ -210,9 +211,11 @@ def call(index):
     try:return json.loads(body)
     except ValueError as err:raise RuntimeError("INVALID_FIXED_CODE_RECEIPT") from err
 
-def main():
+def main(index):
+    if type(index)!=int or index not in (0,1):
+        raise RuntimeError("INVALID_FIXED_MODEL_SELECTION")
     rows=[]
-    for i in range(2):
+    for i in (index,):
         proc=open_caller(Path(os.environ.get("RUNNER_TEMP","/tmp"))/f"nvidia_code_{i}.log")
         try:doc=call(i)
         finally:close_caller(proc)
@@ -235,7 +238,7 @@ def main():
                 "model":MODELS[i],"path":"synthetic/retry_schedule.py",
                 "source":code},sort_keys=True,separators=(",",":")),flush=True)
     print("NVIDIA_CODE_REPAIR_SUMMARY="+json.dumps({
-      "models":len(rows),"provider_calls_reserved":2,"role":"code_repair",
+      "models":len(rows),"provider_calls_reserved":1,"role":"code_repair",
       "full_correct_count":sum(x["all_tests_passed"] for x in rows),
       "tests_per_model":len(CASES),"production_routing":False,
       "manual_code_execution":False,"automatic_commit":False,
@@ -243,7 +246,10 @@ def main():
     },sort_keys=True,separators=(",",":")),flush=True)
 
 if __name__=="__main__":
-    try:main()
+    try:
+        if len(sys.argv)!=2 or sys.argv[1] not in ("poolside","minimax"):
+            raise RuntimeError("ONLY_FIXED_MODEL_ARG_ALLOWED")
+        main(0 if sys.argv[1]=="poolside" else 1)
     except (RuntimeError,CodeRejected,OSError,ValueError) as err:
         print("NVIDIA_CODE_REPAIR_HELD="+str(err),flush=True)
         raise SystemExit(1)
