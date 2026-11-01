@@ -46,9 +46,29 @@ class FullCatalogCampaignTests(unittest.TestCase):
         self.assertEqual(summary["attempted_models"], 61)
         self.assertEqual(summary["eligible_models"], 61)
         self.assertEqual(summary["batches"], 31)
-        self.assertEqual(summary["api_calls"], 92)
+        self.assertEqual(summary["api_calls_receipted"], 92)
         self.assertEqual(summary["request_ceiling"], 4000)
         self.assertFalse(summary["raw_content_or_secrets_exported"])
+
+    def test_transient_batch_restarts_caller_and_reserves_unknown_calls(self):
+        ids = self.ids[:2]
+        with (patch.object(mod, "open_caller", return_value=object()) as started,
+              patch.object(mod, "close_caller"),
+              patch.object(mod.time, "sleep"),
+              patch.object(mod, "invoke", side_effect=[
+                  mod.TemporaryBatchFailure("PRIVATE_SERVICE_RESPONSE_TRANSIENT", cooldown=1),
+                  fake_doc(0, ids),
+              ]) as called,
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(mod.main(), 0)
+        self.assertEqual(called.call_count, 2)
+        self.assertEqual(started.call_count, 2)
+        result = next(line for line in output.getvalue().splitlines()
+                      if line.startswith("NVIDIA_CAMPAIGN_SUMMARY="))
+        summary = json.loads(result.split("=", 1)[1])
+        self.assertEqual(summary["transient_retries"], 1)
+        self.assertEqual(summary["api_calls_max_possible_reserved"], 18)
+        self.assertEqual(summary["api_calls_receipted"], 3)
 
     def test_mismatching_catalog_stops(self):
         with self.assertRaisesRegex(RuntimeError, "CATALOG_CHANGED"):
