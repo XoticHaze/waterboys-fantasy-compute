@@ -190,7 +190,20 @@ def validate_receipt(doc,index):
        doc.get("model_index")!=index or doc.get("model")!=MODELS[index] or
        doc.get("task_id")!="RETRY_DEADLINE_01" or doc.get("provider_calls")!=1):
         raise RuntimeError("SYNTHETIC_CODE_RECEIPT_REJECTED")
+    # Only output reviewed, fixed classification labels and HTTP codes.
+    # Never reveal raw model code, provider body, secret, or exception text.
+    approved_status=("candidate_unexecuted","candidate_format_rejected",
+                     "rate_limited","provider_unavailable",
+                     "transport_or_decode_error")
     status=doc.get("status")
+    code=doc.get("http_status")
+    if status not in approved_status or (
+       code is not None and (type(code)!=int or not 100<=code<=599)):
+        raise RuntimeError("UNTRUSTED_FIXED_CODE_DIAGNOSTIC")
+    print("NVIDIA_CODE_REPAIR_SAFE_GATE="+json.dumps({
+       "model":MODELS[index],"status":status,"http_status":code,
+       "source_candidate_admitted":status=="candidate_unexecuted" and code==200
+    },sort_keys=True,separators=(",",":")),flush=True)
     if status=="rate_limited":raise RuntimeError("NVIDIA_429_HELD_ZERO_AUTORETRY")
     if status!="candidate_unexecuted" or doc.get("http_status")!=200:
         raise RuntimeError("NVIDIA_CODE_CANDIDATE_NOT_ADMITTED")
