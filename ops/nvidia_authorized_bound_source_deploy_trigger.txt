@@ -1,15 +1,15 @@
-2026-11-02 AUTHORIZED_NVIDIA_WORKFORCE_SHADOW_SOURCE_DEPLOY
+2026-11-02 REVIEWED_NVIDIA_WORKFORCE_RUBRIC_V2_DEPLOY
 manual_worker_run=MW-20261102061221249
 existing_worker=cc-shared-nvidia-inference
-reviewed_public_source_sha=c0d9cc345dc7106045b4089048315b7efa33abe2
-reviewed_public_source_ci_run=41399209680
-approval_scope=existing_bound_private_service_worker_synthetic_shadow_qualification
-preserve_existing_NVIDIA_API_KEY_secrets_store_binding=true
-preserve_existing_CC_NVIDIA_DIAGNOSTIC_ENABLED_readback=true
+reviewed_public_source_sha=7db423306798d2e5420fe8f4e136f070b1f69f4b
+reviewed_public_source_ci_run=41401520654
+approval_scope=private_synthetic_workforce_rubric_and_per_model_timeout_diagnostic
+existing_secrets_store_binding_required=true
+preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED=0
 workers_dev=false
 preview_urls=false
 provider_calls_during_deploy=0
-private_repository_actions_compute=false
-private_user_data=false
-no_broker_home_root_or_customer_permissions=true
-No arbitrary prompts, untrusted model IDs, credentials, source exports, public endpoints or production model admission.
+private_github_actions_compute=false
+no_private_user_data_or_model_generated_text_export=true
+no_production_worker_role_promotion=true
+Reason: prior Poolside/GPT-OSS strict results exposed unspecified rubric labels; new prompt-visible enum values and source-keyed boolean checks. MiniMax one 90s transport hold is isolated as a bounded 240s experiment, not aptitude evidence.
