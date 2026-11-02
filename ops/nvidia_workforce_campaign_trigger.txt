@@ -1,1 +1,1 @@
-campaign=v1;source=d18a85c78e3db84ffde6d51cb3d785971e6f0a38;model=53;case=24;limit=8;nonce=MW-20261102061221249-pool-docs-v3
+campaign=v1;source=d18a85c78e3db84ffde6d51cb3d785971e6f0a38;model=52;case=0;limit=2;nonce=MW-20261102080556164-gptoss-news-v3
