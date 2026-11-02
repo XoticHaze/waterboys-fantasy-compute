@@ -1,1 +1,1 @@
-matrix=minimax
+matrix=poolside-tail
