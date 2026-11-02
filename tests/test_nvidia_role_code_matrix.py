@@ -135,12 +135,25 @@ class MatrixTests(unittest.TestCase):
        "reasoning_content_present":True,"reasoning_content":"NEVER_EXPORT_PRIVATE"}
   got=matrix.safe_role_output_diagnostics(doc)
   self.assertEqual(got,{"finish_reason":"length",
-       "final_content_present":False,"reasoning_content_present":True})
+       "final_content_present":False,"reasoning_content_present":True,
+       "prompt_tokens":None,"completion_tokens":None,"reasoning_tokens":None})
   self.assertNotIn("reasoning_content",got)
   self.assertNotIn("NEVER_EXPORT_PRIVATE",repr(got))
   self.assertEqual(matrix.safe_role_output_diagnostics({}),{
        "finish_reason":"not_recorded","final_content_present":None,
-       "reasoning_content_present":None})
+       "reasoning_content_present":None,
+       "prompt_tokens":None,"completion_tokens":None,"reasoning_tokens":None})
+  usage=matrix.safe_role_output_diagnostics({
+       "finish_reason":"length","prompt_tokens":200,
+       "completion_tokens":1800,"reasoning_tokens":1760,
+       "reasoning_content":"UNTRUSTED_PRIVATE_REASONING"})
+  self.assertEqual(usage["completion_tokens"],1800)
+  self.assertEqual(usage["reasoning_tokens"],1760)
+  self.assertNotIn("reasoning_content",usage)
+  for field in ("prompt_tokens","completion_tokens","reasoning_tokens"):
+   for bad in (-1,1000001,3.5,True,"1800",[]):
+    with self.assertRaises(RuntimeError):
+     matrix.safe_role_output_diagnostics({field:bad})
   for bad in ("leak",5,True,[],{}):
    with self.assertRaises(RuntimeError):
     matrix.safe_role_output_diagnostics({"finish_reason":bad})
