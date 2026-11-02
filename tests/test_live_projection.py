@@ -9,7 +9,7 @@ from waterboys_compute.live_projection import (
     estimate_player_finish,
     live_survival_forecast,
 )
-from waterboys_compute.placement import elimination_forecast, elimination_race
+from waterboys_compute.placement import defense_projection_review, elimination_forecast, elimination_race
 from waterboys_compute.weekly_audit import weekly_lineup_audit
 
 
@@ -119,6 +119,18 @@ class LiveSundayForecastTests(unittest.TestCase):
         self.assertEqual(finished["status"], "finished")
         self.assertEqual(finished["bench_opportunities"][0]["hindsight_gain"], 17)
         self.assertTrue(finished["hindsight_only"])
+
+    def test_close_defense_decision_is_review_only(self):
+        starter_dst = starter(1, "D/ST", None, 11, "2026-10-06 01:15:00")
+        starter_dst["position"] = "D/ST"
+        starter_dst["recent_form"] = {"median": 6, "games_count": 3}
+        bench_dst = starter(2, "BE", None, 9, "2026-10-05 18:00:00")
+        bench_dst["position"] = "D/ST"
+        result = defense_projection_review([starter_dst, bench_dst])
+        self.assertTrue(result["review_flag"])
+        self.assertTrue(result["advisory_only"])
+        self.assertEqual(result["projected_starter_edge"], 2)
+        self.assertEqual(result["status"], "review_close_projection")
 
     def test_scheduled_sniper_gap_is_reported(self):
         previous = {"created_at": "2026-10-05T00:30:30Z"}
