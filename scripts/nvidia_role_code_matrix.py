@@ -131,7 +131,7 @@ def safe_case(doc,model_index,task_index):
 
 def run_model(model_index,first_task=0):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
- if type(first_task)!=int or first_task not in (0,2):
+ if type(first_task)!=int or first_task not in (0,2,4):
   raise RuntimeError("INVALID_FIXED_RESUME_BOUNDARY")
  rows=[];verified={}
  for task_index in range(first_task,len(TASKS)):
@@ -193,9 +193,9 @@ def run_model(model_index,first_task=0):
  return summary
 
 def main():
- if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax") or sys.argv[2] not in ("all","tail"):
+ if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax") or sys.argv[2] not in ("all","tail","last"):
   raise RuntimeError("ONLY_FIXED_MODEL_AND_RESUME_SELECTOR_ALLOWED")
- run_model(0 if sys.argv[1]=="poolside" else 1,2 if sys.argv[2]=="tail" else 0)
+ run_model(0 if sys.argv[1]=="poolside" else 1,4 if sys.argv[2]=="last" else 2 if sys.argv[2]=="tail" else 0)
 if __name__=="__main__":
  try:main()
  except (RuntimeError,CodeRejected,OSError,ValueError) as ex:
