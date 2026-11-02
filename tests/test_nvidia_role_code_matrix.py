@@ -130,6 +130,25 @@ class MatrixTests(unittest.TestCase):
    with self.assertRaises(RuntimeError):
     matrix.fixed_role_http_timeout(bad)
 
+ def test_safe_failure_metadata_preserves_only_allowlisted_shape(self):
+  doc={"finish_reason":"length","final_content_present":False,
+       "reasoning_content_present":True,"reasoning_content":"NEVER_EXPORT_PRIVATE"}
+  got=matrix.safe_role_output_diagnostics(doc)
+  self.assertEqual(got,{"finish_reason":"length",
+       "final_content_present":False,"reasoning_content_present":True})
+  self.assertNotIn("reasoning_content",got)
+  self.assertNotIn("NEVER_EXPORT_PRIVATE",repr(got))
+  self.assertEqual(matrix.safe_role_output_diagnostics({}),{
+       "finish_reason":"not_recorded","final_content_present":None,
+       "reasoning_content_present":None})
+  for bad in ("leak",5,True,[],{}):
+   with self.assertRaises(RuntimeError):
+    matrix.safe_role_output_diagnostics({"finish_reason":bad})
+  for field in ("final_content_present","reasoning_content_present"):
+   for bad in ("false",1,[],{}):
+    with self.assertRaises(RuntimeError):
+     matrix.safe_role_output_diagnostics({field:bad})
+
  def test_single_fixed_role_job_selector_fails_closed(self):
   for i in range(5):
    self.assertEqual(matrix.parse_role_selector(f"one:{i}"),(i,i+1))
