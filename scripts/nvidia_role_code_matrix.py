@@ -148,8 +148,14 @@ def safe_role_output_diagnostics(doc):
     or (final is not None and type(final)!=bool)
     or (reasoning is not None and type(reasoning)!=bool)):
   raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+ counts={}
+ for field in ("prompt_tokens","completion_tokens","reasoning_tokens"):
+  value=doc.get(field,None)
+  if(value is not None and (type(value)!=int or not 0<=value<=1000000)):
+   raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+  counts[field]=value
  return {"finish_reason":finish,"final_content_present":final,
-         "reasoning_content_present":reasoning}
+         "reasoning_content_present":reasoning,**counts}
 
 def run_model(model_index,first_task=0,end_task=None):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
