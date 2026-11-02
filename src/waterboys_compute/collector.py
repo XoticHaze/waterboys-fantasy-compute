@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from espn_api.football import League
 
 from .value import build_value_engine
 from .placement import build_placement_engine
+from .live_projection import attach_live_finish, live_survival_forecast
+from .weekly_audit import weekly_lineup_audit
 
 from .normalize import (
     activity_node,
@@ -326,7 +329,11 @@ def collect_snapshot(runtime: dict) -> dict:
             f"league team count mismatch: expected {expected}, got {len(teams)}"
         )
 
+    observed_at = datetime.now(timezone.utc)
+    attach_live_finish(teams, observed_at)
     survival = survival_node(teams, waterboys.get("team_id"))
+    survival["live_forecast"] = live_survival_forecast(teams, waterboys.get("team_id"))
+    lineup_audit = weekly_lineup_audit(waterboys, observed_at)
     market = market_node(teams, free_agents, activity)
     league_runtime = {
         "roster": league_cfg.get("roster"),
@@ -378,6 +385,7 @@ def collect_snapshot(runtime: dict) -> dict:
         "waterboys": waterboys,
         "teams": teams,
         "survival": survival,
+        "weekly_lineup_audit": lineup_audit,
         "market": market,
         "value_engine": value_engine,
         "placement_engine": placement_engine,
