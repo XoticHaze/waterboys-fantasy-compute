@@ -98,6 +98,30 @@ class MatrixTests(unittest.TestCase):
    with self.assertRaises(CodeRejected):
     evaluate(code,function_name=matrix.TASKS[2][1],
              args=matrix.TASKS[2][2],cases=matrix.cases_for(2))
+ def test_locals_are_allowed_without_exec_and_hidden_behavior_still_passes(self):
+  code="""def budget_remaining(limit, spent, reserved, floor):
+    if limit < 0 or spent < 0 or reserved < 0 or floor < 0:
+        return None
+    left = limit - spent - reserved
+    if left < floor:
+        return None
+    return left
+"""
+  t=matrix.TASKS[2]
+  r=evaluate(code,function_name=t[1],args=t[2],cases=matrix.cases_for(2))
+  self.assertTrue(r["all_passed"],r)
+ def test_model_code_cannot_assign_globals_or_unbounded_object_names(self):
+  bad=(
+   GOOD[1].replace("    return max", "    globals = 10\\n    return max"),
+   GOOD[1].replace("    return max", "    __import__ = 10\\n    return max"),
+   GOOD[1].replace("    return max", "    value = 10\\n    return max"),
+   GOOD[1].replace("    return max", "    a,b = 1,2\\n    return max"),
+  )
+  t=matrix.TASKS[1]
+  for candidate in bad:
+   with self.assertRaises(CodeRejected):
+    evaluate(candidate,function_name=t[1],args=t[2],cases=matrix.cases_for(1))
+
  def test_exact_selector_not_a_prompt_or_source(self):
   for i,t in enumerate(matrix.TASKS):
    self.assertEqual(matrix.safe_case({

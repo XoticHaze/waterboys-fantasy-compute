@@ -10,6 +10,7 @@ import ast
 import json
 import os
 import sys
+import re
 from pathlib import Path
 from urllib.error import HTTPError,URLError
 from urllib.request import Request,urlopen
@@ -65,12 +66,26 @@ def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
         any(x.annotation is not None for x in f.args.args)):
         reject()
     nodes=list(ast.walk(f))
-    if len(nodes)>100:reject("AST_COMPLEXITY_LIMIT")
-    statements=(ast.If,ast.Return)
+    if len(nodes)>120:reject("AST_COMPLEXITY_LIMIT")
+    # Local scalar assignments are ordinary Python code, not side effects.
+    # Admit at most four simple non-reserved names in the AST-only interpreter.
+    locals_set=set()
+    for n in nodes:
+        if isinstance(n,ast.Assign):
+            if len(n.targets)!=1 or not isinstance(n.targets[0],ast.Name) or n.type_comment is not None:
+                reject("AST_INVALID_ASSIGNMENT")
+            name=n.targets[0].id
+            if (not re.fullmatch(r"[a-z][a-z0-9_]{0,19}",name)
+                or name in (*args,"min","max","globals","locals","eval","exec","open","input","print","import","subprocess","secret","secrets","token","key")
+                or name.startswith("_")):
+                reject("AST_INVALID_ASSIGNMENT")
+            locals_set.add(name)
+    if len(locals_set)>4:reject("AST_TOO_MANY_LOCALS")
+    statements=(ast.If,ast.Return,ast.Assign)
     expressions=(ast.Name,ast.Load,ast.Constant,ast.BinOp,ast.BoolOp,ast.Compare,
                  ast.UnaryOp,ast.IfExp,ast.Call,ast.And,ast.Or,ast.Add,ast.Sub,
                  ast.Mult,ast.Pow,ast.FloorDiv,ast.USub,ast.UAdd,ast.Eq,ast.NotEq,ast.Lt,
-                 ast.LtE,ast.Gt,ast.GtE,ast.Not)
+                 ast.LtE,ast.Gt,ast.GtE,ast.Not,ast.Store)
     for n in nodes:
         if isinstance(n,(ast.FunctionDef,ast.arguments,ast.arg)):continue
         if isinstance(n,ast.If):
@@ -78,9 +93,9 @@ def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
                 reject()
             if not n.body or any(not isinstance(x,statements) for x in n.body):
                 reject()
-        elif isinstance(n,ast.Return):continue
+        elif isinstance(n,(ast.Return,ast.Assign)):continue
         elif isinstance(n,expressions):
-            if isinstance(n,ast.Name) and n.id not in (*args,"min","max"):
+            if isinstance(n,ast.Name) and n.id not in (*args,"min","max",*locals_set):
                 reject()
             if isinstance(n,ast.Constant) and not (
                n.value is None or type(n.value) is int and -10000<=n.value<=10000):
@@ -162,6 +177,9 @@ def interpret(function,inputs,*,args=ARGUMENTS):
     def statements(body,depth):
         if depth>12:reject("NESTED_IF_LIMIT")
         for stmt in body:
+            if isinstance(stmt,ast.Assign):
+                env[stmt.targets[0].id]=guarded(expression(stmt.value,env))
+                continue
             if isinstance(stmt,ast.Return):
                 return True,guarded(expression(stmt.value,env) if stmt.value is not None else None)
             if isinstance(stmt,ast.If):

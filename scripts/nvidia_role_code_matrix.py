@@ -129,28 +129,44 @@ def safe_case(doc,model_index,task_index):
   raise RuntimeError("UNTRUSTED_ROLE_CASE_SOURCE")
  return status,code,src
 
-def run_model(model_index):
+def run_model(model_index,first_task=0):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
+ if type(first_task)!=int or first_task not in (0,2):
+  raise RuntimeError("INVALID_FIXED_RESUME_BOUNDARY")
  rows=[];verified={}
- for task_index,task in enumerate(TASKS):
+ for task_index in range(first_task,len(TASKS)):
+  task=TASKS[task_index]
   proc=open_caller(Path(os.environ.get("RUNNER_TEMP","/tmp"))/f"nvidia_role_{model_index}_{task_index}.log")
   try: doc=call_case(model_index,task_index)
   finally:close_caller(proc)
   status,http,code=safe_case(doc,model_index,task_index)
   scores={"passed":0,"total":len(INPUTS[task_index]),"all_passed":False,
           "failed_case_indices":[]}
+  rejection_reason=None
   if code is not None:
    try:
     scores=evaluate(code,function_name=task[1],args=task[2],
         cases=cases_for(task_index))
-   except (CodeRejected,TypeError,ValueError):
+   except CodeRejected as exc:
     status="ast_rejected"
+    # A strict enum of reviewer-originated labels only. No source or
+    # model output is used as an error string.
+    allowed={"AST_UNSUPPORTED_NODE","AST_COMPLEXITY_LIMIT",
+     "UNTRUSTED_MODEL_CODE","INTEGER_GROWTH_LIMIT","INVALID_VALUE",
+     "ZERO_DIVISION_REJECTED","EXPONENT_LIMIT","NESTED_IF_LIMIT",
+     "MISSING_RETURN","INVALID_CODE_SYNTAX","AST_INVALID_ASSIGNMENT",
+     "AST_TOO_MANY_LOCALS","UNKNOWN_EXPRESSION"}
+    rejection_reason=str(exc) if str(exc) in allowed else "AST_OTHER"
+   except (TypeError,ValueError):
+    status="ast_rejected"
+    rejection_reason="AST_TYPE_REJECTED"
   receipt={"model":MODELS[model_index],"task_id":task[0],"task_index":task_index,
    "provider_status":status,"http_status":http,
    "latency_ms":doc.get("elapsed_ms"),"tests_passed":scores["passed"],
    "tests_total":scores["total"],"all_tests_passed":scores["all_passed"],
    "model_code_executed":False,"real_repo_mutated":False,
-   "private_data_used":False}
+   "private_data_used":False,
+   "rejection_reason":rejection_reason}
   rows.append(receipt)
   print("NVIDIA_ROLE_CODE_OBSERVATION="+json.dumps(receipt,sort_keys=True,separators=(",",":")),flush=True)
   if scores["all_passed"]:
@@ -170,14 +186,16 @@ def run_model(model_index):
    "behavior_checks_run":sum(v["tests_total"] for v in rows),
    "api_calls_reserved":len(rows),"production_activated":False,
    "model_code_executed":False,"private_data_sent":False,
-   "complete_all_five":len(rows)==len(TASKS)}
+   "first_task_index":first_task,
+   "complete_selected_tasks":len(rows)==len(TASKS)-first_task,
+   "complete_all_five":first_task==0 and len(rows)==len(TASKS)}
  print("NVIDIA_ROLE_CODE_SUMMARY="+json.dumps(summary,sort_keys=True,separators=(",",":")),flush=True)
  return summary
 
 def main():
- if len(sys.argv)!=2 or sys.argv[1] not in ("poolside","minimax"):
-  raise RuntimeError("ONLY_FIXED_MODEL_ARG_ALLOWED")
- run_model(0 if sys.argv[1]=="poolside" else 1)
+ if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax") or sys.argv[2] not in ("all","tail"):
+  raise RuntimeError("ONLY_FIXED_MODEL_AND_RESUME_SELECTOR_ALLOWED")
+ run_model(0 if sys.argv[1]=="poolside" else 1,2 if sys.argv[2]=="tail" else 0)
 if __name__=="__main__":
  try:main()
  except (RuntimeError,CodeRejected,OSError,ValueError) as ex:
