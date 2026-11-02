@@ -98,11 +98,18 @@ def cases_for(index):
   raise ValueError("INVALID_FIXED_ROLE_TASK")
  return tuple((x,oracle(index,x)) for x in INPUTS[index])
 
+def fixed_role_http_timeout(model_index):
+ # Allow the caller to outlive the approved 75-second MiniMax Worker cap,
+ # without silently raising Poolside's normal 55-second caller budget.
+ if type(model_index)!=int or model_index not in (0,1):
+  raise RuntimeError("INVALID_MODEL")
+ return 90 if model_index==1 else 55
+
 def call_case(model_index,task_index):
  selector=json.dumps({"model_index":model_index,"task_index":task_index},separators=(",",":")).encode()
  req=Request(URL,data=selector,headers={"Content-Type":"application/json"},method="POST")
  try:
-  with urlopen(req,timeout=55) as r:
+  with urlopen(req,timeout=fixed_role_http_timeout(model_index)) as r:
    return json.loads(r.read(14000))
  except HTTPError as exc:
   try:return json.loads(exc.read(14000))
