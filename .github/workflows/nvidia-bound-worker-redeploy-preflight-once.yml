@@ -1,5 +1,6 @@
 name: NVIDIA Reviewed Bound Source Deploy (authorized only)
-# Existing private Worker only. Same reviewed source already deployed.
+# Existing private Worker only. Reviewed experimental source pinned and public synthetic tested.
+# Source promotion is explicitly separate from provider role qualification.
 # The Store ID comes from authenticated Worker binding readback, never chat/CI logs.
 on:
   push:
@@ -21,7 +22,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: abd8fcac5299aaf5308e831db6a1fcfcd5066898
+          ref: c0d9cc345dc7106045b4089048315b7efa33abe2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -30,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "abd8fcac5299aaf5308e831db6a1fcfcd5066898"
+          test "$(git rev-parse HEAD)" = "c0d9cc345dc7106045b4089048315b7efa33abe2"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
@@ -47,6 +48,11 @@ jobs:
           node --check local-probe/src/draft_receipt.js
           node --check local-probe/src/index.js
           node --check local-probe/src/micro_receipt.js
+          node --check src/workforce_domain_suite.js
+          node --check src/workforce_provider_runner.js
+          node --check src/workforce_role_selector.js
+          node --check local-probe/src/workforce_receipt.js
+          node --check scripts/workforce_campaign_cli.mjs
       - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
         working-directory: cloudflare/shared-nvidia-inference
         shell: bash
