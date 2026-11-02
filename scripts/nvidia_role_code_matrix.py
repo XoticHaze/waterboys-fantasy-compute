@@ -129,10 +129,13 @@ def safe_case(doc,model_index,task_index):
   raise RuntimeError("UNTRUSTED_ROLE_CASE_SOURCE")
  return status,code,src
 
-def run_model(model_index):
+def run_model(model_index,first_task=0):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
+ if type(first_task)!=int or first_task not in (0,2):
+  raise RuntimeError("INVALID_FIXED_RESUME_BOUNDARY")
  rows=[];verified={}
- for task_index,task in enumerate(TASKS):
+ for task_index in range(first_task,len(TASKS)):
+  task=TASKS[task_index]
   proc=open_caller(Path(os.environ.get("RUNNER_TEMP","/tmp"))/f"nvidia_role_{model_index}_{task_index}.log")
   try: doc=call_case(model_index,task_index)
   finally:close_caller(proc)
@@ -183,14 +186,16 @@ def run_model(model_index):
    "behavior_checks_run":sum(v["tests_total"] for v in rows),
    "api_calls_reserved":len(rows),"production_activated":False,
    "model_code_executed":False,"private_data_sent":False,
-   "complete_all_five":len(rows)==len(TASKS)}
+   "first_task_index":first_task,
+   "complete_selected_tasks":len(rows)==len(TASKS)-first_task,
+   "complete_all_five":first_task==0 and len(rows)==len(TASKS)}
  print("NVIDIA_ROLE_CODE_SUMMARY="+json.dumps(summary,sort_keys=True,separators=(",",":")),flush=True)
  return summary
 
 def main():
- if len(sys.argv)!=2 or sys.argv[1] not in ("poolside","minimax"):
-  raise RuntimeError("ONLY_FIXED_MODEL_ARG_ALLOWED")
- run_model(0 if sys.argv[1]=="poolside" else 1)
+ if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax") or sys.argv[2] not in ("all","tail"):
+  raise RuntimeError("ONLY_FIXED_MODEL_AND_RESUME_SELECTOR_ALLOWED")
+ run_model(0 if sys.argv[1]=="poolside" else 1,2 if sys.argv[2]=="tail" else 0)
 if __name__=="__main__":
  try:main()
  except (RuntimeError,CodeRejected,OSError,ValueError) as ex:
