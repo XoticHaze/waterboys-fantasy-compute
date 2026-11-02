@@ -35,7 +35,7 @@ class CodeRepairTests(unittest.TestCase):
       GOOD.replace("    return min", "    return eval(attempt)\n    return min"),
       GOOD.replace("    return min", "    open(secret)\n    return min"),
       GOOD.replace("    return min", "    while attempt: return 1\n    return min"),
-      GOOD.replace("    return min", "    x = 7\n    return min"),
+      GOOD.replace("    return min", "    x[0] = 7\n    return min"),
       GOOD.replace("    return min", "    return __import__(os)\n    return min"),
     ):
      with self.assertRaises(w.CodeRejected):w.evaluate(code)
