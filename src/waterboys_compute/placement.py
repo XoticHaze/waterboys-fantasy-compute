@@ -263,10 +263,13 @@ def _release_assets(team: dict | None, limit: int = 8) -> list[dict]:
 
 
 def elimination_race(teams: list[dict], survival: dict, *, danger_points: float = 25.0) -> list[dict]:
-    cutline = survival.get("projected_cutline_points")
+    live = survival.get("live_forecast") or {}
+    use_live = live.get("status") in {"estimated", "estimated_with_uncertainty"}
+    cutline = live.get("cutline_points") if use_live else survival.get("projected_cutline_points")
+    ranking = live.get("ranking") if use_live else survival.get("current_week_ranking")
     team_by_id = _team_lookup(teams)
     rows = []
-    for row in survival.get("current_week_ranking") or []:
+    for row in ranking or []:
         projected = row.get("projected_points")
         if not isinstance(projected, (int, float)):
             continue
@@ -275,6 +278,7 @@ def elimination_race(teams: list[dict], survival: dict, *, danger_points: float 
         team = team_by_id.get(row.get("team_id"))
         rows.append({
             "projection_rank": row.get("projection_rank"),
+            "forecast_basis": "live_finish_estimate" if use_live else "weekly_projection",
             "team_id": row.get("team_id"),
             "name": row.get("name"),
             "projected_points": projected,
@@ -293,8 +297,11 @@ def elimination_race(teams: list[dict], survival: dict, *, danger_points: float 
 
 
 def elimination_forecast(teams: list[dict], survival: dict) -> dict:
+    live = survival.get("live_forecast") or {}
+    use_live = live.get("status") in {"estimated", "estimated_with_uncertainty"}
+    source_ranking = live.get("ranking") if use_live else survival.get("current_week_ranking")
     ranking = [
-        row for row in (survival.get("current_week_ranking") or [])
+        row for row in (source_ranking or [])
         if isinstance(row.get("projected_points"), (int, float))
     ]
     if not ranking:
@@ -333,6 +340,7 @@ def elimination_forecast(teams: list[dict], survival: dict) -> dict:
             "name": row.get("name"),
             "actual_points": row.get("points"),
             "actual_rank": row.get("rank"),
+            "forecast_basis": "live_finish_estimate" if use_live else "weekly_projection",
             "projected_points": projected,
             "projection_rank": projected_rank,
             "gap_above_projected_low": round(gap, 4),
@@ -359,8 +367,9 @@ def elimination_forecast(teams: list[dict], survival: dict) -> dict:
     )
     return {
         "method": (
-            "Relative risk weighting from current ESPN projected totals. "
-            "Weights rank likely release pools for preparation; they are not calibrated probabilities."
+            "Relative risk weighting from live finish estimates when available, "
+            "or ESPN full-week projections otherwise. Release-pool weights are "
+            "advisory and not calibrated elimination probabilities."
         ),
         "not_calibrated_probability": True,
         "projected_low": round(lowest_projection, 4),
@@ -1071,18 +1080,22 @@ def build_placement_engine(
         round(current_points - float(cutline), 4)
         if isinstance(cutline, (int, float)) else None
     )
+    live = survival.get("live_forecast") or {}
+    use_live = live.get("status") in {"estimated", "estimated_with_uncertainty"}
+    pressure_rank = live.get("waterboys_rank") if use_live else current_rank
+    pressure_margin = live.get("waterboys_margin") if use_live else margin
     alive = int(survival.get("alive_team_count") or 0)
     if (
-        isinstance(current_rank, int)
+        isinstance(pressure_rank, int)
         and alive
-        and current_rank >= alive - 1
-    ) or (isinstance(margin, (int, float)) and margin < 5):
+        and pressure_rank >= alive - 1
+    ) or (isinstance(pressure_margin, (int, float)) and pressure_margin < 5):
         pressure = "red"
     elif (
-        isinstance(current_rank, int)
+        isinstance(pressure_rank, int)
         and alive
-        and current_rank >= alive - 4
-    ) or (isinstance(margin, (int, float)) and margin < 15):
+        and pressure_rank >= alive - 4
+    ) or (isinstance(pressure_margin, (int, float)) and pressure_margin < 15):
         pressure = "yellow"
     else:
         pressure = "green"
@@ -1109,6 +1122,10 @@ def build_placement_engine(
             "alive_team_count": alive,
             "projected_cutline_points": cutline,
             "margin_over_projected_cutline": margin,
+            "live_forecast": live,
+            "survival_rank_basis": "live_finish_estimate" if use_live else "weekly_projection",
+            "survival_pressure_rank": pressure_rank,
+            "survival_pressure_margin": pressure_margin,
         },
         "lineup_optimizer": {
             "current_lineup_projected_points": current_points,
