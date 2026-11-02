@@ -122,6 +122,14 @@ class MatrixTests(unittest.TestCase):
    with self.assertRaises(CodeRejected):
     evaluate(candidate,function_name=t[1],args=t[2],cases=matrix.cases_for(1))
 
+ def test_caller_timeout_is_model_scoped_and_exceeds_minimax_worker_deadline(self):
+  self.assertEqual(matrix.fixed_role_http_timeout(0),55)
+  self.assertEqual(matrix.fixed_role_http_timeout(1),90)
+  self.assertGreater(matrix.fixed_role_http_timeout(1),75)
+  for bad in (-1,2,"minimax",None,True,1.0):
+   with self.assertRaises(RuntimeError):
+    matrix.fixed_role_http_timeout(bad)
+
  def test_single_fixed_role_job_selector_fails_closed(self):
   for i in range(5):
    self.assertEqual(matrix.parse_role_selector(f"one:{i}"),(i,i+1))
