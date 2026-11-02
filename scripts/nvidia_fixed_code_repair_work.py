@@ -48,7 +48,7 @@ class CodeRejected(ValueError):pass
 def reject(message="UNTRUSTED_MODEL_CODE"):
     raise CodeRejected(message)
 
-def parse_subset(code):
+def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
     if not isinstance(code,str) or not 75<=len(code)<=1051 or code.count("\n")>24:
         reject()
     if any(ord(x)>127 for x in code) or "\t" in code or "#" in code or "\r" in code:
@@ -58,10 +58,10 @@ def parse_subset(code):
     if len(t.body)!=1 or not isinstance(t.body[0],ast.FunctionDef):
         reject()
     f=t.body[0]
-    if (f.name!="retry_delay_ms" or f.decorator_list or f.returns is not None or
+    if (f.name!=function_name or f.decorator_list or f.returns is not None or
         f.type_comment is not None or f.args.posonlyargs or f.args.kwonlyargs or
         f.args.vararg or f.args.kwarg or f.args.defaults or f.args.kw_defaults or
-        tuple(x.arg for x in f.args.args)!=ARGUMENTS or
+        tuple(x.arg for x in f.args.args)!=args or
         any(x.annotation is not None for x in f.args.args)):
         reject()
     nodes=list(ast.walk(f))
@@ -69,7 +69,7 @@ def parse_subset(code):
     statements=(ast.If,ast.Return)
     expressions=(ast.Name,ast.Load,ast.Constant,ast.BinOp,ast.BoolOp,ast.Compare,
                  ast.UnaryOp,ast.IfExp,ast.Call,ast.And,ast.Or,ast.Add,ast.Sub,
-                 ast.Mult,ast.Pow,ast.USub,ast.UAdd,ast.Eq,ast.NotEq,ast.Lt,
+                 ast.Mult,ast.Pow,ast.FloorDiv,ast.USub,ast.UAdd,ast.Eq,ast.NotEq,ast.Lt,
                  ast.LtE,ast.Gt,ast.GtE,ast.Not)
     for n in nodes:
         if isinstance(n,(ast.FunctionDef,ast.arguments,ast.arg)):continue
@@ -80,7 +80,7 @@ def parse_subset(code):
                 reject()
         elif isinstance(n,ast.Return):continue
         elif isinstance(n,expressions):
-            if isinstance(n,ast.Name) and n.id not in (*ARGUMENTS,"min","max"):
+            if isinstance(n,ast.Name) and n.id not in (*args,"min","max"):
                 reject()
             if isinstance(n,ast.Constant) and not (
                n.value is None or type(n.value) is int and -10000<=n.value<=10000):
@@ -119,6 +119,9 @@ def expression(node,env,depth=0):
         if isinstance(node.op,ast.Add):return guarded(a+b)
         if isinstance(node.op,ast.Sub):return guarded(a-b)
         if isinstance(node.op,ast.Mult):return guarded(a*b)
+        if isinstance(node.op,ast.FloorDiv):
+            if b==0:reject("ZERO_DIVISION_REJECTED")
+            return guarded(a//b)
         if isinstance(node.op,ast.Pow):
             if not 0<=b<=20:reject("EXPONENT_LIMIT")
             return guarded(a**b)
@@ -154,8 +157,8 @@ def expression(node,env,depth=0):
         return guarded(min(vals) if node.func.id=="min" else max(vals))
     reject("UNKNOWN_EXPRESSION")
 
-def interpret(function,inputs):
-    env=dict(zip(ARGUMENTS,inputs))
+def interpret(function,inputs,*,args=ARGUMENTS):
+    env=dict(zip(args,inputs))
     def statements(body,depth):
         if depth>12:reject("NESTED_IF_LIMIT")
         for stmt in body:
@@ -172,12 +175,12 @@ def interpret(function,inputs):
     if not returned:reject("MISSING_RETURN")
     return value
 
-def evaluate(code):
-    f=parse_subset(code)
+def evaluate(code,*,function_name="retry_delay_ms",args=ARGUMENTS,cases=CASES):
+    f=parse_subset(code,function_name=function_name,args=args)
     results=[]
-    for input_values,expected in CASES:
+    for input_values,expected in cases:
         try:
-            value=interpret(f,input_values)
+            value=interpret(f,input_values,args=args)
             passed=type(value) is type(expected) and value==expected
             results.append(passed)
         except (CodeRejected,ArithmeticError,TypeError,ValueError,OverflowError):
