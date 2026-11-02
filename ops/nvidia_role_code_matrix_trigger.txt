@@ -1,1 +1,1 @@
-matrix=minimax-tail
+matrix=minimax-last
