@@ -122,6 +122,16 @@ class MatrixTests(unittest.TestCase):
    with self.assertRaises(CodeRejected):
     evaluate(candidate,function_name=t[1],args=t[2],cases=matrix.cases_for(1))
 
+ def test_single_fixed_role_job_selector_fails_closed(self):
+  for i in range(5):
+   self.assertEqual(matrix.parse_role_selector(f"one:{i}"),(i,i+1))
+  self.assertEqual(matrix.parse_role_selector("all"),(0,5))
+  self.assertEqual(matrix.parse_role_selector("tail"),(2,5))
+  self.assertEqual(matrix.parse_role_selector("last"),(4,5))
+  for candidate in ("one:5","one:-1","one:00","one:2;echo hello",
+       "one:../../private","poolside","work=0","job:0",None,0):
+   with self.assertRaises(RuntimeError):
+    matrix.parse_role_selector(candidate)
  def test_exact_selector_not_a_prompt_or_source(self):
   for i,t in enumerate(matrix.TASKS):
    self.assertEqual(matrix.safe_case({
