@@ -407,6 +407,8 @@ function buildBrief(snapshot, runId, stateCommit) {
       acquisition_budget_remaining: waterboys.acquisition_budget_remaining,
       current_week_points: waterboys.current_week_points,
       current_week_projected_points: waterboys.current_week_projected_points,
+      current_week_live_estimated_points: waterboys.current_week_live_estimated_points,
+      live_finish_quality: waterboys.live_finish_quality,
       current_week_rank: waterboys.current_week_rank,
       current_week_projection_rank: waterboys.current_week_projection_rank,
       roster: (waterboys.roster || []).map((player) => ({
@@ -422,6 +424,7 @@ function buildBrief(snapshot, runId, stateCommit) {
       })),
     },
     survival: snapshot.survival || {},
+    weekly_lineup_audit: snapshot.weekly_lineup_audit || {},
     market: {
       budget_leaderboard: market.budget_leaderboard || [],
       successful_waiver_bids: (market.successful_waiver_bids || []).slice(0, 25),
