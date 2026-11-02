@@ -33,6 +33,48 @@ def _injury_status(player: dict) -> str:
     return str(player.get("injury_status") or "").upper()
 
 
+def defense_projection_review(roster: list[dict]) -> dict:
+    """Flag near-tie D/ST choices for review; never override autonomous lineup selection."""
+    defenses = [p for p in roster if p.get("position") == "D/ST"]
+    started = next((p for p in defenses if _lineup_slot(p) == "D/ST"), None)
+    available = [p for p in defenses if _lineup_slot(p) == "BE"]
+    if not started or not available:
+        return {"status": "no_direct_comparison", "review_flag": False}
+
+    challenger = max(
+        available,
+        key=lambda p: num((p.get("current_week") or {}).get("projected_points")),
+    )
+    started_projection = num((started.get("current_week") or {}).get("projected_points"))
+    challenger_projection = num((challenger.get("current_week") or {}).get("projected_points"))
+    edge = round(started_projection - challenger_projection, 4)
+
+    def detail(player: dict) -> dict:
+        recent = player.get("recent_form") or {}
+        week = player.get("current_week") or {}
+        return {
+            "player_id": player.get("player_id"),
+            "name": player.get("name"),
+            "opponent": week.get("opponent"),
+            "weekly_projection": week.get("projected_points"),
+            "recent_median_points": recent.get("median"),
+            "recent_max_single_game_share": recent.get("max_single_game_share"),
+            "recent_game_count": recent.get("games_count"),
+        }
+
+    return {
+        "status": "review_close_projection" if abs(edge) <= 3 else (
+            "starter_lower_projected" if edge < 0 else "starter_projected_ahead"
+        ),
+        "review_flag": abs(edge) <= 3 or edge < 0,
+        "projected_starter_edge": edge,
+        "starter": detail(started),
+        "bench_alternative": detail(challenger),
+        "advisory_only": True,
+        "note": "Close pregame projections warrant matchup research, not automatic hindsight-driven switching.",
+    }
+
+
 def _game_locked(player: dict) -> bool:
     return isinstance((player.get("current_week") or {}).get("points"), (int, float))
 
@@ -1141,6 +1183,7 @@ def build_placement_engine(
             "recommended_changes": _lineup_changes(roster, base_weekly),
             "starter_holes": base_weekly.get("starter_holes") or [],
             "optimized_lineup": base_weekly.get("players"),
+            "dst_projection_review": defense_projection_review(roster),
         },
         "elimination_race": race,
         "elimination_pool_forecast": {
