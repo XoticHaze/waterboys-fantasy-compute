@@ -31,7 +31,10 @@ jobs:
           set -euo pipefail
           test "$(git -C approved-source rev-parse HEAD)" = 'c91377e009abd1c089abd168fea2d7aa135d71f4'
           selector="$(cat ops/nvidia_role_code_matrix_trigger.txt)"
-          test "$selector" = 'matrix=poolside' || test "$selector" = 'matrix=minimax'
+          case "$selector" in
+            matrix=poolside|matrix=minimax|matrix=poolside-tail|matrix=minimax-tail) ;;
+            *) exit 1 ;;
+          esac
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           python -m py_compile scripts/nvidia_role_code_matrix.py
           python -m unittest discover -s tests -p 'test_nvidia_role_code_matrix.py' -v
@@ -58,13 +61,13 @@ jobs:
         run: |
           set -euo pipefail
           selector="$(cat "$GITHUB_WORKSPACE/ops/nvidia_role_code_matrix_trigger.txt")"
-          if [ "$selector" = 'matrix=poolside' ]; then
-            python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" poolside
-          elif [ "$selector" = 'matrix=minimax' ]; then
-            python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax
-          else
-            exit 1
-          fi
+          case "$selector" in
+            matrix=poolside) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" poolside all ;;
+            matrix=minimax) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax all ;;
+            matrix=poolside-tail) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" poolside tail ;;
+            matrix=minimax-tail) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax tail ;;
+            *) exit 1 ;;
+          esac
       - name: Always restore disabled diagnostic and verify original Secrets Store binding
         if: always()
         shell: bash
