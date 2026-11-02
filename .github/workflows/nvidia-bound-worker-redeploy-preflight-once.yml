@@ -89,6 +89,7 @@ jobs:
           if flag.get('type')!='plain_text' or flag.get('text')!='0':
               raise SystemExit('PRODUCTION_DIAGNOSTIC_FLAG_INVALID')
           observed_flag=flag['text']
+          if observed_flag!='0': raise SystemExit('V4_REDEPLOY_REQUIRES_DIAGNOSTICS_DISABLED')
           cfg=json.loads(Path('wrangler.jsonc').read_text())
           if not (cfg.get('name')=='cc-shared-nvidia-inference' and cfg.get('workers_dev') is False
                   and cfg.get('preview_urls') is False and cfg.get('vars',{}).get('CC_NVIDIA_DIAGNOSTIC_ENABLED')=='0'
