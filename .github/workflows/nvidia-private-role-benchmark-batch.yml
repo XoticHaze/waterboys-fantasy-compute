@@ -120,6 +120,20 @@ jobs:
               print('NVIDIA_ROLE_CATALOG_HTTP='+str(doc.get('catalog_http')))
               print('NVIDIA_ROLE_CATALOG_COUNT='+str(doc.get('catalog_count')))
               print('NVIDIA_ROLE_ELIGIBLE_COUNT='+str(doc.get('eligible_count')))
+              # Provider catalog IDs are public metadata, not private prompts.
+              # This catalog-only case performs zero completion requests and
+              # prints exact stable sorted indexes for the separate workforce
+              # runner, avoiding 404 retries on retired catalog entries.
+              if batch == -1:
+                  ids=doc.get('eligible_model_ids')
+                  if not isinstance(ids,list) or not 1<=len(ids)<=150 or len(set(ids))!=len(ids):
+                      raise SystemExit('WORKFORCE_CATALOG_INVALID')
+                  for index,model_id in enumerate(sorted(ids)):
+                      if not isinstance(model_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{2,80}/[A-Za-z0-9_.:-]{2,120}',model_id):
+                          raise SystemExit('WORKFORCE_CATALOG_MODEL_ID_INVALID')
+                      print('NVIDIA_WORKFORCE_CATALOG_INDEX='+json.dumps(
+                          {'index':index,'model':model_id},sort_keys=True,separators=(',',':')))
+                  print('NVIDIA_WORKFORCE_CATALOG_INDEX_COUNT='+str(len(ids)))
               print('NVIDIA_ROLE_BATCH='+str(batch))
               print('NVIDIA_ROLE_STATUS='+str(doc.get('status')))
               print('NVIDIA_ROLE_PROVIDER_CALLS='+str(count))
