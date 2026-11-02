@@ -196,16 +196,20 @@ def run_model(model_index,first_task=0,end_task=None):
  print("NVIDIA_ROLE_CODE_SUMMARY="+json.dumps(summary,sort_keys=True,separators=(",",":")),flush=True)
  return summary
 
-def main():
- if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax"):
-  raise RuntimeError("ONLY_FIXED_MODEL_AND_ROLE_SELECTOR_ALLOWED")
- selector=sys.argv[2]
+def parse_role_selector(selector):
+ if not isinstance(selector,str):raise RuntimeError("ONLY_FIXED_ROLE_JOB_SELECTOR_ALLOWED")
  if selector=="all":start,end=0,5
  elif selector=="tail":start,end=2,5
  elif selector=="last":start,end=4,5
  elif selector in ("one:0","one:1","one:2","one:3","one:4"):
   start=int(selector[-1]);end=start+1
  else:raise RuntimeError("ONLY_FIXED_ROLE_JOB_SELECTOR_ALLOWED")
+ return start,end
+
+def main():
+ if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax"):
+  raise RuntimeError("ONLY_FIXED_MODEL_AND_ROLE_SELECTOR_ALLOWED")
+ start,end=parse_role_selector(sys.argv[2])
  run_model(0 if sys.argv[1]=="poolside" else 1,start,end)
 if __name__=="__main__":
  try:main()
