@@ -139,18 +139,31 @@ def run_model(model_index):
   status,http,code=safe_case(doc,model_index,task_index)
   scores={"passed":0,"total":len(INPUTS[task_index]),"all_passed":False,
           "failed_case_indices":[]}
+  rejection_reason=None
   if code is not None:
    try:
     scores=evaluate(code,function_name=task[1],args=task[2],
         cases=cases_for(task_index))
-   except (CodeRejected,TypeError,ValueError):
+   except CodeRejected as exc:
     status="ast_rejected"
+    # A strict enum of reviewer-originated labels only. No source or
+    # model output is used as an error string.
+    allowed={"AST_UNSUPPORTED_NODE","AST_COMPLEXITY_LIMIT",
+     "UNTRUSTED_MODEL_CODE","INTEGER_GROWTH_LIMIT","INVALID_VALUE",
+     "ZERO_DIVISION_REJECTED","EXPONENT_LIMIT","NESTED_IF_LIMIT",
+     "MISSING_RETURN","INVALID_CODE_SYNTAX","AST_INVALID_ASSIGNMENT",
+     "AST_TOO_MANY_LOCALS","UNKNOWN_EXPRESSION"}
+    rejection_reason=str(exc) if str(exc) in allowed else "AST_OTHER"
+   except (TypeError,ValueError):
+    status="ast_rejected"
+    rejection_reason="AST_TYPE_REJECTED"
   receipt={"model":MODELS[model_index],"task_id":task[0],"task_index":task_index,
    "provider_status":status,"http_status":http,
    "latency_ms":doc.get("elapsed_ms"),"tests_passed":scores["passed"],
    "tests_total":scores["total"],"all_tests_passed":scores["all_passed"],
    "model_code_executed":False,"real_repo_mutated":False,
-   "private_data_used":False}
+   "private_data_used":False,
+   "rejection_reason":rejection_reason}
   rows.append(receipt)
   print("NVIDIA_ROLE_CODE_OBSERVATION="+json.dumps(receipt,sort_keys=True,separators=(",",":")),flush=True)
   if scores["all_passed"]:
