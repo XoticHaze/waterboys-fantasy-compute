@@ -76,7 +76,7 @@ def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
                 reject("AST_INVALID_ASSIGNMENT")
             name=n.targets[0].id
             if (not re.fullmatch(r"[a-z][a-z0-9_]{0,19}",name)
-                or name in (*args,"min","max")
+                or name in (*args,"min","max","globals","locals","eval","exec","open","input","print","import","subprocess","secret","secrets","token","key")
                 or name.startswith("_")):
                 reject("AST_INVALID_ASSIGNMENT")
             locals_set.add(name)
