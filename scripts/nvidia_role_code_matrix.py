@@ -136,6 +136,21 @@ def safe_case(doc,model_index,task_index):
   raise RuntimeError("UNTRUSTED_ROLE_CASE_SOURCE")
  return status,code,src
 
+def safe_role_output_diagnostics(doc):
+ """Preserve only small model-failure metadata; never source or reasoning text."""
+ if not isinstance(doc,dict):
+  raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+ finish=doc.get("finish_reason","not_recorded")
+ final=doc.get("final_content_present",None)
+ reasoning=doc.get("reasoning_content_present",None)
+ if(type(finish)!=str or finish not in
+      ("stop","length","tool_calls","content_filter","other","not_recorded")
+    or (final is not None and type(final)!=bool)
+    or (reasoning is not None and type(reasoning)!=bool)):
+  raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+ return {"finish_reason":finish,"final_content_present":final,
+         "reasoning_content_present":reasoning}
+
 def run_model(model_index,first_task=0,end_task=None):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
  if end_task is None:end_task=len(TASKS)
@@ -171,6 +186,7 @@ def run_model(model_index,first_task=0,end_task=None):
     status="ast_rejected"
     rejection_reason="AST_TYPE_REJECTED"
   receipt={"model":MODELS[model_index],"task_id":task[0],"task_index":task_index,
+   **safe_role_output_diagnostics(doc),
    "provider_status":status,"http_status":http,
    "latency_ms":doc.get("elapsed_ms"),"tests_passed":scores["passed"],
    "tests_total":scores["total"],"all_tests_passed":scores["all_passed"],
