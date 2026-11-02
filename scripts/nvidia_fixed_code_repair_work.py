@@ -94,7 +94,7 @@ def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
     return f
 
 def guarded(value):
-    if type(value) is int and abs(value)>100_000_000:
+    if type(value) is int and abs(value)>1_000_000_000_000:
         reject("INTEGER_GROWTH_LIMIT")
     if value is not None and type(value) not in (int,bool):
         reject("INVALID_VALUE")
