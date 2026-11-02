@@ -32,7 +32,7 @@ jobs:
           test "$(git -C approved-source rev-parse HEAD)" = 'abd8fcac5299aaf5308e831db6a1fcfcd5066898'
           selector="$(cat ops/nvidia_role_code_matrix_trigger.txt)"
           case "$selector" in
-            matrix=poolside|matrix=minimax|matrix=poolside-tail|matrix=minimax-tail) ;;
+            matrix=poolside|matrix=minimax|matrix=poolside-tail|matrix=minimax-tail|matrix=minimax-last) ;;
             *) exit 1 ;;
           esac
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
@@ -66,6 +66,7 @@ jobs:
             matrix=minimax) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax all ;;
             matrix=poolside-tail) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" poolside tail ;;
             matrix=minimax-tail) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax tail ;;
+            matrix=minimax-last) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax last ;;
             *) exit 1 ;;
           esac
       - name: Always restore disabled diagnostic and verify original Secrets Store binding
