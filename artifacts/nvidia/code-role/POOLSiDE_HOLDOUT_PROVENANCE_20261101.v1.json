@@ -1,0 +1,43 @@
+{
+  "schema": "commandcenter.nvidia_poolside_multitask_property_holdout.v1",
+  "subject": "Five exact Poolside-generated public-synthetic Python functions, not hand-edited templates",
+  "source_repository": "XoticHaze/waterboys-fantasy-compute",
+  "model": "poolside/laguna-xs-2.1",
+  "worker": "cc-shared-nvidia-inference",
+  "source_runs": [
+    {
+      "run_id": 41368669180,
+      "job_id": 125034202604,
+      "source_tasks": [
+        "RETRY_DEADLINE_01",
+        "BOUNDED_CLAMP_02"
+      ]
+    },
+    {
+      "run_id": 41369461560,
+      "job_id": 125036599841,
+      "source_tasks": [
+        "RESERVED_BUDGET_03",
+        "ALLOCATION_BPS_04",
+        "STALE_HEARTBEAT_05"
+      ]
+    }
+  ],
+  "source_artifact_directory": "artifacts/nvidia/code-role/",
+  "independent_existing_tests_per_task": 30,
+  "new_unseen_deterministic_property_checks_per_task": 500,
+  "random_seed_base": 20261101,
+  "scorer": "scripts/nvidia_fixed_code_repair_work.py AST-only interpreter; no exec, compile or import of model source",
+  "oracle": "scripts/nvidia_role_code_matrix.py",
+  "new_provider_calls": 0,
+  "model_code_executed": false,
+  "private_input_used": false,
+  "production_activation": false,
+  "limits": [
+    "All functions are public synthetic tasks selected by immutable reviewed Worker source; no real project source used",
+    "Passing deterministic finite holdout tests is not a proof of correctness for all integer inputs or robustness on arbitrary project code",
+    "Poolside results were obtained across two runs after original AST validator rejected local-variable forms; this is not a five-for-five unmodified first-pass result",
+    "The new 2500 checks are separate from the 150 earlier checks, using reproducible random seeds",
+    "Neither model is authorized for automatic patch application, execution or protected CommandCenter actions"
+  ]
+}
