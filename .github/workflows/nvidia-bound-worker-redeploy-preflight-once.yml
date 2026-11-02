@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 7db423306798d2e5420fe8f4e136f070b1f69f4b
+          ref: d18a85c78e3db84ffde6d51cb3d785971e6f0a38
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "7db423306798d2e5420fe8f4e136f070b1f69f4b"
+          test "$(git rev-parse HEAD)" = "d18a85c78e3db84ffde6d51cb3d785971e6f0a38"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
