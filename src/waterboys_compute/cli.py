@@ -8,6 +8,7 @@ from .collector import collect_player_history, collect_snapshot
 from .command import execute_guarded
 from .placement import command_for_lineup_repair, commands_for_lineup_repair
 from .sniper import command_for_cancel, command_for_selection, plan_sniper
+from .health import sniper_cadence
 
 
 def _lineup_command_signature(command: dict) -> tuple:
@@ -90,6 +91,9 @@ def main() -> int:
 
     if args.action == "snapshot":
         snapshot = collect_snapshot(runtime)
+        snapshot.setdefault("diagnostics", {})["sniper_cadence"] = sniper_cadence(
+            runtime.get("sniper_state"), snapshot["collected_at"]
+        )
         result = broker.publish_snapshot(snapshot)
         print(json.dumps({
             "WATERBOYS_SNAPSHOT": "accepted",
@@ -164,8 +168,12 @@ def main() -> int:
     except Exception as exc:
         history_error = f"{type(exc).__name__}: {str(exc)[:240]}"
 
+    snapshot.setdefault("diagnostics", {})["sniper_cadence"] = sniper_cadence(
+        previous, snapshot["collected_at"]
+    )
     snapshot_result = broker.publish_snapshot(snapshot)
     report = plan_sniper(snapshot, policy, previous)
+    report["cadence_health"] = sniper_cadence(previous, report["created_at"])
     report["history_hydration_error"] = history_error
 
     if live:
@@ -238,6 +246,9 @@ def main() -> int:
             )
             lineup_repair_count += followup_count
 
+        snapshot.setdefault("diagnostics", {})["sniper_cadence"] = sniper_cadence(
+            previous, snapshot["collected_at"]
+        )
         snapshot_result = broker.publish_snapshot(snapshot)
         report["post_action_snapshot_collected_at"] = snapshot.get("collected_at")
 
