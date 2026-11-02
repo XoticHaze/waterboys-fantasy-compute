@@ -1,1 +1,1 @@
-campaign=v1;source=c0d9cc345dc7106045b4089048315b7efa33abe2;model=0;case=0;limit=4;nonce=MW-20261102061221249
+campaign=v1;source=c0d9cc345dc7106045b4089048315b7efa33abe2;model=25;case=0;limit=8;nonce=MW-20261102061221249-mini-market
