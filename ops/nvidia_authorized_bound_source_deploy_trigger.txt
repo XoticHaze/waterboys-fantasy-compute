@@ -1,1 +1,15 @@
-2026-11-01 FOCUSED_NVIDIA_ROLE_CODE_TIMEOUT_ADJUSTMENT: deploy existing cc-shared-nvidia-inference Worker exact source abd8fcac5299aaf5308e831db6a1fcfcd5066898, modifying ONLY the fixed fictional five-case coding route request abort from 18000ms to 35000ms after observed MiniMax synthetic model timeout. Original 40 RPM per-isolate soft limit and 3 RPS burst limit unchanged. Existing NVIDIA_API_KEY Cloudflare Secrets Store reference, private Service Binding, default diagnostic 0, workers_dev and preview disabled, zero provider calls during deployment and exact binding readback mandatory. No arbitrary prompts/models, device/broker/source access, private GitHub Actions compute or automatic retries. Companion AST-only public synthetic reviewer permits at most four bounded scalar variables and keeps imports, loops, mutable/indexed assignments and arbitrary eval denied.
+2026-11-02 AUTHORIZED_NVIDIA_WORKFORCE_SHADOW_SOURCE_DEPLOY
+manual_worker_run=MW-20261102061221249
+existing_worker=cc-shared-nvidia-inference
+reviewed_public_source_sha=c0d9cc345dc7106045b4089048315b7efa33abe2
+reviewed_public_source_ci_run=41399209680
+approval_scope=existing_bound_private_service_worker_synthetic_shadow_qualification
+preserve_existing_NVIDIA_API_KEY_secrets_store_binding=true
+preserve_existing_CC_NVIDIA_DIAGNOSTIC_ENABLED_readback=true
+workers_dev=false
+preview_urls=false
+provider_calls_during_deploy=0
+private_repository_actions_compute=false
+private_user_data=false
+no_broker_home_root_or_customer_permissions=true
+No arbitrary prompts, untrusted model IDs, credentials, source exports, public endpoints or production model admission.
