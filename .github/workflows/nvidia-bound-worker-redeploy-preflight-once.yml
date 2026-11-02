@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 367b4cb5461cf5082ae5abf6212c51a111a5035b
+          ref: c91377e009abd1c089abd168fea2d7aa135d71f4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "367b4cb5461cf5082ae5abf6212c51a111a5035b"
+          test "$(git rev-parse HEAD)" = "c91377e009abd1c089abd168fea2d7aa135d71f4"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
@@ -39,6 +39,9 @@ jobs:
           node --check src/draft_pilot_runner.js
           node --check src/fixed_code_repair_fixture.js
           node --check src/fixed_code_repair_runner.js
+          node --check src/code_role_suite.js
+          node --check src/code_role_suite_runner.js
+          node --check local-probe/src/code_role_receipt.js
           node --check local-probe/src/code_receipt.js
           node --check src/draft_pilot_fixtures.js
           node --check local-probe/src/draft_receipt.js

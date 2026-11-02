@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 367b4cb5461cf5082ae5abf6212c51a111a5035b
+          ref: c91377e009abd1c089abd168fea2d7aa135d71f4
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C approved-source rev-parse HEAD)" = "367b4cb5461cf5082ae5abf6212c51a111a5035b"
+          test "$(git -C approved-source rev-parse HEAD)" = "c91377e009abd1c089abd168fea2d7aa135d71f4"
           selector="$(cat ops/nvidia_micro_worker_trigger.txt)"
           if [ "$selector" != 'micro=both' ] && [ "$selector" != 'micro=diagnostic' ] && [ "$selector" != 'micro=primary' ] && [ "$selector" != 'micro=fallback' ] && [ "$selector" != 'micro=fallback-resume-2' ]; then
             echo 'MICRO_SELECTOR_NOT_APPROVED'
