@@ -1,0 +1,82 @@
+{
+  "schema": "commandcenter.nvidia_coding_role_evaluation.v2",
+  "asof": "2026-11-01",
+  "transport": "existing_private_cloudflare_service_binding",
+  "workload": "five_distinct_fictional_python_bugfixes",
+  "models": [
+    {
+      "model": "poolside/laguna-xs-2.1",
+      "run_ids": [
+        41368669180,
+        41369461560
+      ],
+      "unique_tasks": 5,
+      "provider_calls": 8,
+      "verified_tasks": 5,
+      "unique_behavior_tests_passed": 150,
+      "unique_behavior_tests_total": 150,
+      "attempted_http_429": 0,
+      "remaining_unverified": [],
+      "verified_source_dir": "artifacts/nvidia/code-role",
+      "latencies_ms_by_verified_task": {
+        "RETRY_DEADLINE_01": 1323,
+        "BOUNDED_CLAMP_02": 2295,
+        "RESERVED_BUDGET_03": 1544,
+        "ALLOCATION_BPS_04": 2234,
+        "STALE_HEARTBEAT_05": 796
+      },
+      "original_three_ast_rejections_classified_as_interpreter_local_assignment_gap": true
+    },
+    {
+      "model": "minimaxai/minimax-m3.1-flash",
+      "run_ids": [
+        41368770454,
+        41369555467,
+        41369989289
+      ],
+      "unique_tasks": 5,
+      "provider_calls": 6,
+      "verified_tasks": 3,
+      "unique_behavior_tests_passed": 90,
+      "unique_behavior_tests_total": 150,
+      "attempted_http_429": 0,
+      "remaining_unverified": [
+        {
+          "task": "RESERVED_BUDGET_03",
+          "first_attempt": "transport_timeout_at_18000ms",
+          "second_attempt": "format_rejected_http200_at_28632ms"
+        },
+        {
+          "task": "ALLOCATION_BPS_04",
+          "first_attempt": "transport_timeout_at_35001ms"
+        }
+      ],
+      "verified_source_dir": "artifacts/nvidia/code-role-minimax",
+      "latencies_ms_by_verified_task": {
+        "RETRY_DEADLINE_01": 15001,
+        "BOUNDED_CLAMP_02": 7527,
+        "STALE_HEARTBEAT_05": 23256
+      }
+    }
+  ],
+  "limitations": [
+    "All tasks use immutable synthetic source; no source from private CommandCenter or real customer inputs",
+    "Only five small Python functions; unrestricted coding ability, longer workflows and generalization remain unverified",
+    "AST-only scorer never executes model code with Python eval/exec/import/compile",
+    "No global account-wide quota proven, only per-Worker-isolate 40RPM pacing and a fixed selector route",
+    "No authoritative CommandCenter typed-job intake or result receipt pipeline from arbitrary approved project workloads was exercised",
+    "No automatic promotion of models or production command execution"
+  ],
+  "selection": {
+    "candidate_fast_bounded_code": "poolside/laguna-xs-2.1",
+    "confidence": "PROVISIONAL_FIVE_FIXED_TASKS",
+    "minimax": "LOWER_COMPLETION_AND_HIGHER_LATENCY_ON_THIS_WORKLOAD",
+    "production_activated": false
+  },
+  "readback": {
+    "diagnostic_disabled_after_every_run": true,
+    "model_code_executed": false,
+    "real_repo_patched": false,
+    "private_data_exposed": false
+  }
+}
