@@ -1,1 +1,1 @@
-campaign=v1;source=7db423306798d2e5420fe8f4e136f070b1f69f4b;model=53;case=0;limit=8;nonce=MW-20261102061221249-pool-v2
+campaign=v1;source=d18a85c78e3db84ffde6d51cb3d785971e6f0a38;model=53;case=0;limit=2;nonce=MW-20261102061221249-pool-news-v3
