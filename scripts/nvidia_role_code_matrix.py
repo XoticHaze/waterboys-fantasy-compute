@@ -129,12 +129,15 @@ def safe_case(doc,model_index,task_index):
   raise RuntimeError("UNTRUSTED_ROLE_CASE_SOURCE")
  return status,code,src
 
-def run_model(model_index,first_task=0):
+def run_model(model_index,first_task=0,end_task=None):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
- if type(first_task)!=int or first_task not in (0,2,4):
-  raise RuntimeError("INVALID_FIXED_RESUME_BOUNDARY")
+ if end_task is None:end_task=len(TASKS)
+ if (type(first_task)!=int or type(end_task)!=int or
+     not ((first_task,end_task) in ((0,5),(2,5),(4,5)) or
+          0<=first_task<5 and end_task==first_task+1)):
+  raise RuntimeError("INVALID_FIXED_ROLE_JOB_BOUNDARY")
  rows=[];verified={}
- for task_index in range(first_task,len(TASKS)):
+ for task_index in range(first_task,end_task):
   task=TASKS[task_index]
   proc=open_caller(Path(os.environ.get("RUNNER_TEMP","/tmp"))/f"nvidia_role_{model_index}_{task_index}.log")
   try: doc=call_case(model_index,task_index)
@@ -187,15 +190,23 @@ def run_model(model_index,first_task=0):
    "api_calls_reserved":len(rows),"production_activated":False,
    "model_code_executed":False,"private_data_sent":False,
    "first_task_index":first_task,
-   "complete_selected_tasks":len(rows)==len(TASKS)-first_task,
-   "complete_all_five":first_task==0 and len(rows)==len(TASKS)}
+   "selected_tasks":end_task-first_task,
+   "complete_selected_tasks":len(rows)==end_task-first_task,
+   "complete_all_five":first_task==0 and end_task==5 and len(rows)==len(TASKS)}
  print("NVIDIA_ROLE_CODE_SUMMARY="+json.dumps(summary,sort_keys=True,separators=(",",":")),flush=True)
  return summary
 
 def main():
- if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax") or sys.argv[2] not in ("all","tail","last"):
-  raise RuntimeError("ONLY_FIXED_MODEL_AND_RESUME_SELECTOR_ALLOWED")
- run_model(0 if sys.argv[1]=="poolside" else 1,4 if sys.argv[2]=="last" else 2 if sys.argv[2]=="tail" else 0)
+ if len(sys.argv)!=3 or sys.argv[1] not in ("poolside","minimax"):
+  raise RuntimeError("ONLY_FIXED_MODEL_AND_ROLE_SELECTOR_ALLOWED")
+ selector=sys.argv[2]
+ if selector=="all":start,end=0,5
+ elif selector=="tail":start,end=2,5
+ elif selector=="last":start,end=4,5
+ elif selector in ("one:0","one:1","one:2","one:3","one:4"):
+  start=int(selector[-1]);end=start+1
+ else:raise RuntimeError("ONLY_FIXED_ROLE_JOB_SELECTOR_ALLOWED")
+ run_model(0 if sys.argv[1]=="poolside" else 1,start,end)
 if __name__=="__main__":
  try:main()
  except (RuntimeError,CodeRejected,OSError,ValueError) as ex:
