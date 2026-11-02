@@ -16,14 +16,14 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      WORKFORCE_SOURCE_SHA: d18a85c78e3db84ffde6d51cb3d785971e6f0a38
+      WORKFORCE_V4_SOURCE_SHA: 471768d5ddc13a1661eb941aac3333dddd291242
       WORKFORCE_CASES_THIS_PASS: '4'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: d18a85c78e3db84ffde6d51cb3d785971e6f0a38
+          ref: 471768d5ddc13a1661eb941aac3333dddd291242
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -32,14 +32,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C approved-source rev-parse HEAD)" = "d18a85c78e3db84ffde6d51cb3d785971e6f0a38"
+          test "$(git -C approved-source rev-parse HEAD)" = "471768d5ddc13a1661eb941aac3333dddd291242"
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           node --check approved-source/cloudflare/shared-nvidia-inference/src/workforce_provider_runner.js
-          node --check approved-source/cloudflare/shared-nvidia-inference/scripts/workforce_campaign_cli.mjs
+          node --check approved-source/cloudflare/shared-nvidia-inference/scripts/workforce_v4_campaign_cli.mjs
           python - <<'PY'
           import os,re,json
           from pathlib import Path
-          sha='d18a85c78e3db84ffde6d51cb3d785971e6f0a38'
+          sha='471768d5ddc13a1661eb941aac3333dddd291242'
           cfg=json.loads(Path('approved-source/cloudflare/shared-nvidia-inference/wrangler.jsonc').read_text())
           if (cfg.get('name')!='cc-shared-nvidia-inference' or
               cfg.get('main')!='src/index.js' or cfg.get('workers_dev') is not False or
@@ -49,17 +49,17 @@ jobs:
           for k in ('route','routes','triggers','secrets_store_secrets'):
               if k in cfg:raise SystemExit('WORKFORCE_UNEXPECTED_PUBLIC_ROUTE_OR_SECRET_REFERENCE')
           raw=Path('ops/nvidia_workforce_campaign_trigger.txt').read_text().strip()
-          pattern=r'campaign=v1;source='+sha+r';model=([0-9]{1,4});case=([0-9]{1,2});limit=([0-9]{1,2});nonce=([A-Za-z0-9_-]{6,64})'
+          pattern=r'campaign=v4;source='+sha+r';model=([0-9]{1,4});case=([0-9]{1,2});limit=([0-9]{1,2});nonce=([A-Za-z0-9_-]{6,64})'
           m=re.fullmatch(pattern,raw)
           if not m:raise SystemExit('EXACT_WORKFORCE_TRIGGER_REQUIRED')
           model,case,limit=(int(x) for x in m.groups()[:3])
-          if not (0<=model<10000 and 0<=case<32 and 1<=limit<=8):
+          if not (0<=model<10000 and 0<=case<60 and 1<=limit<=8):
               raise SystemExit('BOUND_WORKFORCE_SELECTOR_INVALID')
           with Path(os.environ['GITHUB_ENV']).open('a') as f:
               f.write('WORKFORCE_MODEL_INDEX_START='+str(model)+'\n')
               f.write('WORKFORCE_CASE_INDEX_START='+str(case)+'\n')
               f.write('WORKFORCE_CASES_THIS_PASS='+str(limit)+'\n')
-          print('REVIEWED_WORKFORCE_SOURCE=PASS')
+          print('REVIEWED_WORKFORCE_V4_SOURCE=PASS')
           print('NVIDIA_WORKFORCE_EXPERIMENT_SYNTHETIC_ONLY=PASS')
           print('MAX_MODEL_CASES_THIS_RUN='+str(limit))
           print('PRIVATE_PAYLOADS_EXPORTED=false')
@@ -74,7 +74,7 @@ jobs:
         working-directory: approved-source/cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "d18a85c78e3db84ffde6d51cb3d785971e6f0a38"
+          test "$(git rev-parse HEAD)" = "471768d5ddc13a1661eb941aac3333dddd291242"
           npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/workforce_local_private.log" 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
@@ -85,7 +85,7 @@ jobs:
             sleep 1
           done
           if [ "$ready" != 1 ]; then echo WORKFORCE_PRIVATE_CALLER_UNAVAILABLE; exit 1; fi
-          node scripts/workforce_campaign_cli.mjs
+          node scripts/workforce_v4_campaign_cli.mjs
       - name: Always restore disabled diagnostics, preserving original Secrets Store reference
         if: always()
         shell: bash
@@ -98,6 +98,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nvidia-workforce-shadow-receipts
-          path: approved-source/cloudflare/shared-nvidia-inference/artifacts/nvidia-workforce-qualification/*.json
+          path: approved-source/cloudflare/shared-nvidia-inference/artifacts/nvidia-v4-mechanism/*.json
           retention-days: 14
           if-no-files-found: ignore
