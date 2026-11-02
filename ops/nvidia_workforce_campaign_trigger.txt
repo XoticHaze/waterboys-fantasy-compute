@@ -1,1 +1,1 @@
-campaign=v1;source=d18a85c78e3db84ffde6d51cb3d785971e6f0a38;model=53;case=10;limit=8;nonce=MW-20261102103432290-poolside-missing-b
+campaign=v1;source=d18a85c78e3db84ffde6d51cb3d785971e6f0a38;model=53;case=18;limit=6;nonce=MW-20261102103432290-poolside-missing-c
