@@ -33,6 +33,8 @@ jobs:
           selector="$(cat ops/nvidia_role_code_matrix_trigger.txt)"
           case "$selector" in
             matrix=poolside|matrix=minimax|matrix=poolside-tail|matrix=minimax-tail|matrix=minimax-last) ;;
+            job=poolside:0|job=poolside:1|job=poolside:2|job=poolside:3|job=poolside:4) ;;
+            job=minimax:0|job=minimax:1|job=minimax:2|job=minimax:3|job=minimax:4) ;;
             *) exit 1 ;;
           esac
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
@@ -67,6 +69,10 @@ jobs:
             matrix=poolside-tail) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" poolside tail ;;
             matrix=minimax-tail) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax tail ;;
             matrix=minimax-last) python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax last ;;
+            job=poolside:0|job=poolside:1|job=poolside:2|job=poolside:3|job=poolside:4)
+              python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" poolside "one:${selector#job=poolside:}" ;;
+            job=minimax:0|job=minimax:1|job=minimax:2|job=minimax:3|job=minimax:4)
+              python "$GITHUB_WORKSPACE/scripts/nvidia_role_code_matrix.py" minimax "one:${selector#job=minimax:}" ;;
             *) exit 1 ;;
           esac
       - name: Always restore disabled diagnostic and verify original Secrets Store binding
