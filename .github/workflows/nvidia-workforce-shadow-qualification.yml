@@ -16,14 +16,14 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      WORKFORCE_SOURCE_SHA: c0d9cc345dc7106045b4089048315b7efa33abe2
+      WORKFORCE_SOURCE_SHA: 7db423306798d2e5420fe8f4e136f070b1f69f4b
       WORKFORCE_CASES_THIS_PASS: '4'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: c0d9cc345dc7106045b4089048315b7efa33abe2
+          ref: 7db423306798d2e5420fe8f4e136f070b1f69f4b
           path: approved-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -32,14 +32,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C approved-source rev-parse HEAD)" = "c0d9cc345dc7106045b4089048315b7efa33abe2"
+          test "$(git -C approved-source rev-parse HEAD)" = "7db423306798d2e5420fe8f4e136f070b1f69f4b"
           (cd approved-source/cloudflare/shared-nvidia-inference && npm test)
           node --check approved-source/cloudflare/shared-nvidia-inference/src/workforce_provider_runner.js
           node --check approved-source/cloudflare/shared-nvidia-inference/scripts/workforce_campaign_cli.mjs
           python - <<'PY'
           import os,re,json
           from pathlib import Path
-          sha='c0d9cc345dc7106045b4089048315b7efa33abe2'
+          sha='7db423306798d2e5420fe8f4e136f070b1f69f4b'
           cfg=json.loads(Path('approved-source/cloudflare/shared-nvidia-inference/wrangler.jsonc').read_text())
           if (cfg.get('name')!='cc-shared-nvidia-inference' or
               cfg.get('main')!='src/index.js' or cfg.get('workers_dev') is not False or
@@ -74,7 +74,7 @@ jobs:
         working-directory: approved-source/cloudflare/shared-nvidia-inference
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "c0d9cc345dc7106045b4089048315b7efa33abe2"
+          test "$(git rev-parse HEAD)" = "7db423306798d2e5420fe8f4e136f070b1f69f4b"
           npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/workforce_local_private.log" 2>&1 &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
