@@ -1,14 +1,14 @@
-2026-11-02 REVIEWED_NVIDIA_WORKFORCE_CAUSAL_NEWS_ORACLE_V3_DEPLOY
-manual_worker_run=MW-20261102061221249
+2026-11-03 REVIEWED_NVIDIA_WORKFORCE_MECHANISM_V4_SYNTHETIC_SOURCE_ONLY
+manual_worker_run=MW-20261103065614536
 existing_worker=cc-shared-nvidia-inference
-reviewed_public_source_sha=d18a85c78e3db84ffde6d51cb3d785971e6f0a38
-reviewed_public_source_ci_run=41402200893
-approval_scope=existing_private_synthetic_model_research_oracle_correction
+reviewed_public_source_sha=0d5131a1fec357c3317973c24febecee6f98818b
+reviewed_public_source_ci_run=41589590058
+approval_scope=existing_private_synthetic_model_research_mechanism_v4_only
 preserve_bound_NVIDIA_API_KEY_secrets_store_reference=true
 preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED=0
 workers_dev=false
 preview_urls=false
-provider_calls_during_deploy=0
 private_user_data_or_model_response_export=false
 no_broker_device_root_customer_actions=true
-Rationale: Fix provenance-sensitive news lookahead from observed-after-cutoff records, keep diagnostic and private Service Binding unchanged.
+release_request_created_utc=2026-11-03T07:07:03.913Z
+Rationale: Existing approved private-bound synthetic diagnostics only; no generic encrypted A1 admission or live/protected operation.
