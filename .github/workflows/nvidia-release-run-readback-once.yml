@@ -21,14 +21,11 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
-        with:
-          python-version: '3.11'
       - name: Compile only source-owned public-release metadata reader
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/nvidia_release_run_readback_once.py
+          python3 -m py_compile scripts/nvidia_release_run_readback_once.py
           test "$GITHUB_REF" = "refs/heads/main"
           grep -F 'release_sha=f4011b5ba23a805bb9cbbce9c811f7e1493db4d0' ops/nvidia_release_readback_once.txt >/dev/null
           grep -F 'worker_source=0d5131a1fec357c3317973c24febecee6f98818b' ops/nvidia_release_readback_once.txt >/dev/null
@@ -36,4 +33,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/nvidia_release_run_readback_once.py
+          python3 scripts/nvidia_release_run_readback_once.py
