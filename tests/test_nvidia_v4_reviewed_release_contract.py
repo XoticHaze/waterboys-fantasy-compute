@@ -6,7 +6,7 @@ The workflow and deploy run must be separately accepted by the owning release.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-V4 = ROOT / ".github/workflows/nvidia-workforce-v4-mechanism-once.yml"
+V4 = ROOT / ".github/workflows/nvidia-workforce-shadow-qualification.yml"
 DEPLOY = ROOT / ".github/workflows/nvidia-bound-worker-redeploy-preflight-once.yml"
 RELEASE = ROOT / "ops/nvidia_authorized_bound_source_deploy_trigger.txt"
 V4_TRIGGER = ROOT / "ops/nvidia_v4_workforce_campaign_trigger.txt"
@@ -44,6 +44,8 @@ def test_deploy_requires_new_reviewed_manifest_without_executing():
 def test_v4_public_synthetic_workflow_requires_verified_prior_release():
     v4 = V4.read_text()
     assert "ops/nvidia_v4_workforce_campaign_trigger.txt" in v4
+    assert "WORKFORCE_V4_SOURCE_SHA: " + SOURCE in v4
+    assert "ops/nvidia_workforce_campaign_trigger.txt" not in v4
     assert not V4_TRIGGER.exists()  # the PR must not start a provider session
     assert 'test "$GITHUB_RUN_ATTEMPT" = "1"' in v4
     assert 'run.get("conclusion")=="success"' in v4
