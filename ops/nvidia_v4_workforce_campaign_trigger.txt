@@ -1,1 +1,1 @@
-campaign=v4;source=0d5131a1fec357c3317973c24febecee6f98818b;model=53;case=0;limit=4;release_run=41594188501;release_sha=f4011b5ba23a805bb9cbbce9c811f7e1493db4d0;nonce=MW-20261103065614536-poolside-receipts-v4-01
+campaign=v4;source=0d5131a1fec357c3317973c24febecee6f98818b;model=25;case=0;limit=4;release_run=41594188501;release_sha=f4011b5ba23a805bb9cbbce9c811f7e1493db4d0;nonce=MW-20261103065614536-minimax-receipts-v4-comparator
