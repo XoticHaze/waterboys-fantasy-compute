@@ -84,6 +84,45 @@ jobs:
               "EXACT_REVIEWED_V4_RELEASE_MANIFEST=PASS" in workflow and
               "flag.get('text')!='0'" in workflow):
               raise SystemExit("V4_RELEASE_WORKFLOW_SOURCE_NOT_VERIFIED")
+          # Confirm the exact Worker version actively serving was created
+          # inside the independently authenticated successful release run.
+          # No payload or token is emitted, and a later unrelated deployment
+          # must not inherit the release run's trust.
+          from datetime import datetime,timezone,timedelta
+          import uuid
+          def utc(raw):
+              if not isinstance(raw,str):raise SystemExit("V4_VERSION_TIME_UNTRUSTED")
+              try:return datetime.fromisoformat(raw.replace("Z","+00:00")).astimezone(timezone.utc)
+              except (ValueError,TypeError):raise SystemExit("V4_VERSION_TIME_INVALID")
+          account=os.environ.get("CLOUDFLARE_ACCOUNT_ID","")
+          token=os.environ.get("CLOUDFLARE_API_TOKEN","")
+          if not re.fullmatch(r"[a-fA-F0-9]{32}",account) or len(token)<8:
+              raise SystemExit("V4_CLOUDFLARE_AUTH_NOT_READY")
+          url=("https://api.cloudflare.com/client/v4/accounts/"+account+
+              "/workers/scripts/cc-shared-nvidia-inference/deployments")
+          req=Request(url,headers={"Authorization":"Bearer "+token,
+                                   "Accept":"application/json"})
+          with urlopen(req,timeout=20) as response: actual=json.load(response)
+          deployments=actual.get("result",{}).get("deployments",[])
+          if actual.get("success") is not True or not isinstance(deployments,list) or not deployments:
+              raise SystemExit("V4_ACTIVE_DEPLOYMENT_UNVERIFIED")
+          active=deployments[0]
+          versions=active.get("versions",[]) if isinstance(active,dict) else []
+          if not isinstance(versions,list) or len(versions)!=1 or versions[0].get("percentage")!=100:
+              raise SystemExit("V4_ACTIVE_DEPLOYMENT_NOT_EXACT")
+          try:
+              current_version=str(uuid.UUID(versions[0]["version_id"]))
+              deployment_id=str(uuid.UUID(active["id"]))
+              created=utc(active["created_on"])
+          except (ValueError,KeyError,TypeError):
+              raise SystemExit("V4_ACTIVE_VERSION_UNTRUSTED")
+          start=utc(run.get("run_started_at") or run.get("created_at"))
+          finished=utc(run.get("updated_at"))
+          if not (start<=created<=finished+timedelta(seconds=90)):
+              raise SystemExit("V4_ACTIVE_VERSION_NOT_FROM_REVIEWED_RELEASE")
+          print("V4_ACTIVE_DEPLOYMENT_VERSION_VERIFIED=PASS")
+          print("V4_ACTIVE_VERSION_ID="+current_version)
+          print("V4_ACTIVE_DEPLOYMENT_ID="+deployment_id)
           with Path(os.environ["GITHUB_ENV"]).open("a") as f:
               f.write("WORKFORCE_MODEL_INDEX_START="+str(model)+"\n")
               f.write("WORKFORCE_CASE_INDEX_START="+str(case)+"\n")
