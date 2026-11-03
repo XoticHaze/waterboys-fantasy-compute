@@ -1,0 +1,1 @@
+observe=v1;release_sha=f4011b5ba23a805bb9cbbce9c811f7e1493db4d0;worker_source=0d5131a1fec357c3317973c24febecee6f98818b;workflow=nvidia-bound-worker-redeploy-preflight-once.yml;nonce=MW-20261103065614536-public-release-readback
