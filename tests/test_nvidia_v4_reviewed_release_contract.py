@@ -62,7 +62,22 @@ def test_v4_public_synthetic_workflow_requires_verified_prior_release():
     assert "ops/nvidia_v4_workforce_campaign_trigger.txt" in v4
     assert "WORKFORCE_V4_SOURCE_SHA: " + SOURCE in v4
     assert "ops/nvidia_workforce_campaign_trigger.txt" not in v4
-    assert not V4_TRIGGER.exists()  # the PR must not start a provider session
+    # After an authorized exact-source campaign is triggered, the fixture
+    # request may exist. Validate its constrained shape instead of requiring
+    # it to remain absent. Runtime active-version admission stays independent.
+    if V4_TRIGGER.exists():
+        match = re.fullmatch(
+            r"campaign=v4;source=" + SOURCE +
+            r";model=(25|53);case=([0-9]{1,2});limit=([1-4]);"
+            r"release_run=([0-9]{8,20});release_sha=([a-f0-9]{40});"
+            r"nonce=([A-Za-z0-9_-]{12,64})",
+            V4_TRIGGER.read_text().strip(),
+        )
+        assert match, "only exact-source fixed synthetic selectors are admitted"
+        _, case, limit, _, _, _ = match.groups()
+        case, limit = int(case), int(limit)
+        assert case < 60 and case + limit <= 60
+        assert case // 20 == (case + limit - 1) // 20
     assert 'test "$GITHUB_RUN_ATTEMPT" = "1"' in v4
     assert 'run.get("conclusion")=="success"' in v4
     assert 'run.get("run_attempt")==1' in v4
