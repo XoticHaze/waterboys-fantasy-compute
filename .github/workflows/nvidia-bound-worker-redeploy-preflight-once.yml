@@ -178,4 +178,50 @@ jobs:
           print('NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS')
           print('NVIDIA_SECRET_VALUE_ACCESSED=0')
           print('NVIDIA_PROVIDER_CALLS=0')
+          # Bind this release to an observed, actively serving Worker version.
+          # Settings parity alone does not establish deployment identity.
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import uuid
+          url=('https://api.cloudflare.com/client/v4/accounts/'+a+
+              '/workers/scripts/cc-shared-nvidia-inference/deployments')
+          request=Request(url,headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+          with urlopen(request,timeout=20) as response: dep_doc=json.load(response)
+          deps=dep_doc.get('result',{}).get('deployments',[])
+          if dep_doc.get('success') is not True or not isinstance(deps,list) or not deps:
+              raise SystemExit('WORKER_DEPLOYMENT_READBACK_UNAVAILABLE')
+          active=deps[0]
+          versions=active.get('versions',[]) if isinstance(active,dict) else []
+          if not isinstance(versions,list) or len(versions)!=1 or versions[0].get('percentage')!=100:
+              raise SystemExit('WORKER_DEPLOYMENT_NOT_SINGLE_FULL_VERSION')
+          try:
+              deployment_id=str(uuid.UUID(active['id']))
+              version_id=str(uuid.UUID(versions[0]['version_id']))
+              created=datetime.fromisoformat(active['created_on'].replace("Z","+00:00")).astimezone(timezone.utc)
+          except (ValueError,TypeError,KeyError,AttributeError):
+              raise SystemExit('WORKER_ACTIVE_VERSION_ID_INVALID')
+          if created>datetime.now(timezone.utc):
+              raise SystemExit('WORKER_DEPLOYMENT_TIME_IN_FUTURE')
+          proof={
+              "schema":"commandcenter.nvidia_v4_public_synthetic_release_version.v1",
+              "repository":os.environ["GITHUB_REPOSITORY"],"run_id":os.environ["GITHUB_RUN_ID"],
+              "controller_sha":os.environ["GITHUB_SHA"],
+              "reviewed_source_sha":"0d5131a1fec357c3317973c24febecee6f98818b",
+              "worker_name":"cc-shared-nvidia-inference",
+              "deployment_id":deployment_id,"version_id":version_id,
+              "deployment_created_on":active["created_on"],
+              "diagnostic_disabled":True,"secret_reference_preserved":True,
+              "full_model_text_exported":False,"private_input_used":False,
+              "production_admitted":False}
+          Path(os.environ["GITHUB_WORKSPACE"],"nvidia-v4-release-version.json").write_text(
+              json.dumps(proof,sort_keys=True)+"\n",encoding="utf-8")
+          print('NVIDIA_BOUND_WORKER_ACTIVE_DEPLOYMENT=VERIFIED')
+          print('NVIDIA_BOUND_WORKER_VERSION_ID='+version_id)
           PY
+      - name: Publish only bounded synthetic-release version identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-v4-reviewed-release-version
+          path: nvidia-v4-release-version.json
+          retention-days: 14
+          if-no-files-found: error
