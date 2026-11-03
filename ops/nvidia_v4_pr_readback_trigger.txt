@@ -1,1 +1,1 @@
-probe=v1;release_sha=f4011b5ba23a805bb9cbbce9c811f7e1493db4d0;scope=public_metadata_only
+probe=v1;target_sha=9765fe40a73b9bc64fd94e03d557c3ab3ded72af;scope=public_metadata_only
