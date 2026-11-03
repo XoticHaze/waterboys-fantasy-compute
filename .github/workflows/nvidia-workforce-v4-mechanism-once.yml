@@ -66,7 +66,7 @@ jobs:
           run=github("https://api.github.com/repos/"+repo+"/actions/runs/"+release_run)
           if not (run.get("id")==int(release_run) and run.get("head_sha")==release_sha
              and run.get("status")=="completed" and run.get("conclusion")=="success"
-             and run.get("event")=="push" and
+             and run.get("event")=="push" and run.get("run_attempt")==1 and
              str(run.get("path","")).startswith(".github/workflows/nvidia-bound-worker-redeploy-preflight-once.yml")):
               raise SystemExit("V4_OWNER_DEPLOYMENT_NOT_VERIFIED")
           m=github("https://api.github.com/repos/"+repo+
@@ -75,6 +75,15 @@ jobs:
           if "reviewed_public_source_sha="+sha not in body or (
              "approval_scope=existing_private_synthetic_model_research_mechanism_v4_only" not in body):
               raise SystemExit("V4_DEPLOYMENT_SCOPE_MISMATCH")
+          # The referenced successful release must have executed the exact
+          # V4-pinned reviewed deploy workflow, not a historical V3 workflow.
+          w=github("https://api.github.com/repos/"+repo+
+              "/contents/.github/workflows/nvidia-bound-worker-redeploy-preflight-once.yml?ref="+release_sha)
+          workflow=base64.b64decode(w.get("content","")).decode("utf-8")
+          if not ("ref: 0d5131a1fec357c3317973c24febecee6f98818b" in workflow and
+              "EXACT_REVIEWED_V4_RELEASE_MANIFEST=PASS" in workflow and
+              "flag.get('text')!='0'" in workflow):
+              raise SystemExit("V4_RELEASE_WORKFLOW_SOURCE_NOT_VERIFIED")
           with Path(os.environ["GITHUB_ENV"]).open("a") as f:
               f.write("WORKFORCE_MODEL_INDEX_START="+str(model)+"\n")
               f.write("WORKFORCE_CASE_INDEX_START="+str(case)+"\n")
