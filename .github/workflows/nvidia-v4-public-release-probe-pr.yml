@@ -27,7 +27,7 @@ jobs:
           from pathlib import Path
           from urllib.request import Request,urlopen
           repo="XoticHaze/waterboys-fantasy-compute"
-          sha="9765fe40a73b9bc64fd94e03d557c3ab3ded72af"
+          sha="3cb80b156898f5e962b7ff7956cd7bf05cda0310"
           workflow="nvidia-workforce-shadow-qualification.yml"
           trigger=Path("ops/nvidia_v4_pr_readback_trigger.txt").read_text().strip()
           expected="probe=v1;target_sha="+sha+";scope=public_metadata_only"
