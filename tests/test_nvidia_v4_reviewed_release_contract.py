@@ -35,8 +35,21 @@ def test_deploy_requires_new_reviewed_manifest_without_executing():
     assert "EXACT_REVIEWED_V4_RELEASE_MANIFEST=PASS" in release
     assert "REVIEWED_V4_RELEASE_REQUEST_NOT_ADMITTED" in release
     assert "existing_private_synthetic_model_research_mechanism_v4_only" in release
-    assert "REVIEWED_NVIDIA_WORKFORCE_CAUSAL_NEWS_ORACLE_V3_DEPLOY" in current_trigger
-    assert SOURCE not in current_trigger
+    # The old V3 trigger was separately superseded by the narrowly reviewed
+    # V4 request. Source checks must validate the real current exact manifest,
+    # not demand yesterday's trigger even after the release was requested.
+    if "REVIEWED_NVIDIA_WORKFORCE_MECHANISM_V4_SYNTHETIC_SOURCE_ONLY" in current_trigger:
+        assert "reviewed_public_source_sha=" + SOURCE in current_trigger
+        assert "reviewed_public_source_ci_run=41589590058" in current_trigger
+        assert "approval_scope=existing_private_synthetic_model_research_mechanism_v4_only" in current_trigger
+        assert "preserve_bound_NVIDIA_API_KEY_secrets_store_reference=true" in current_trigger
+        assert "preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED=0" in current_trigger
+        assert "private_user_data_or_model_response_export=false" in current_trigger
+        assert "workers_dev=false" in current_trigger
+        assert "preview_urls=false" in current_trigger
+    else:
+        assert "REVIEWED_NVIDIA_WORKFORCE_CAUSAL_NEWS_ORACLE_V3_DEPLOY" in current_trigger
+        assert SOURCE not in current_trigger
     assert release.count("flag.get('text')!='0'") == 2
     assert "ACCOUNT_SECRET_BINDING_NOT_PRESERVED" in release
     assert "NVIDIA_SECRET_VALUE_ACCESSED=0" in release
