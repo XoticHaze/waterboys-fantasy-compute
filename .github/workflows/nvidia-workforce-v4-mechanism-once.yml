@@ -1,0 +1,148 @@
+name: NVIDIA V4 Fixed Fictional Mechanism Review (Private Bound Worker)
+# Candidate-only until owner-approved deployment of the exact pinned source.
+# No arbitrary prompts, real private inputs, model prose or protected actions.
+on:
+  push:
+    branches: [main]
+    paths: ['ops/nvidia_v4_workforce_campaign_trigger.txt']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  run-reviewed-v4-synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GITHUB_API_READ_TOKEN: ${{ github.token }}
+      WORKFORCE_V4_SOURCE_SHA: 0d5131a1fec357c3317973c24febecee6f98818b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: controller
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 0d5131a1fec357c3317973c24febecee6f98818b
+          path: reviewed-source
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify source, fixed selector, reviewed release and offline tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git -C reviewed-source rev-parse HEAD)" = "0d5131a1fec357c3317973c24febecee6f98818b"
+          python - <<'PY'
+          import os,re,json,base64
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          sha="0d5131a1fec357c3317973c24febecee6f98818b"
+          cfg=json.loads(Path("reviewed-source/cloudflare/shared-nvidia-inference/wrangler.jsonc").read_text())
+          if not (cfg.get("name")=="cc-shared-nvidia-inference" and
+                  cfg.get("workers_dev") is False and cfg.get("preview_urls") is False and
+                  cfg.get("vars",{}).get("CC_NVIDIA_DIAGNOSTIC_ENABLED")=="0" and
+                  "route" not in cfg and "routes" not in cfg and "secrets_store_secrets" not in cfg):
+              raise SystemExit("V4_PRIVATE_WORKER_CONFIG_INVALID")
+          raw=Path("controller/ops/nvidia_v4_workforce_campaign_trigger.txt").read_text().strip()
+          expr=r"campaign=v4;source="+sha+r";model=(25|53);case=([0-9]{1,2});limit=([1-4]);release_run=([0-9]{8,20});release_sha=([a-f0-9]{40});nonce=([A-Za-z0-9_-]{12,64})"
+          match=re.fullmatch(expr,raw)
+          if match is None:raise SystemExit("V4_FIXED_SYNTHETIC_SELECTOR_REQUIRED")
+          model,case,limit,release_run,release_sha,_=match.groups()
+          model,case,limit=int(model),int(case),int(limit)
+          if case>=60 or case+limit>60 or case//20!=(case+limit-1)//20:
+              raise SystemExit("V4_ROLE_BOUNDARY_EXCEEDED")
+          repo="XoticHaze/waterboys-fantasy-compute"
+          headers={"Authorization":"Bearer "+os.environ["GITHUB_API_READ_TOKEN"],
+                   "Accept":"application/vnd.github+json",
+                   "User-Agent":"cc-nvidia-v4-exact-release-verify"}
+          def github(url):
+              with urlopen(Request(url,headers=headers),timeout=20) as r:return json.load(r)
+          run=github("https://api.github.com/repos/"+repo+"/actions/runs/"+release_run)
+          if not (run.get("id")==int(release_run) and run.get("head_sha")==release_sha
+             and run.get("status")=="completed" and run.get("conclusion")=="success"
+             and run.get("event")=="push" and
+             str(run.get("path","")).startswith(".github/workflows/nvidia-bound-worker-redeploy-preflight-once.yml")):
+              raise SystemExit("V4_OWNER_DEPLOYMENT_NOT_VERIFIED")
+          m=github("https://api.github.com/repos/"+repo+
+              "/contents/ops/nvidia_authorized_bound_source_deploy_trigger.txt?ref="+release_sha)
+          body=base64.b64decode(m.get("content","")).decode("utf-8")
+          if "reviewed_public_source_sha="+sha not in body or (
+             "approval_scope=existing_private_synthetic_model_research_mechanism_v4_only" not in body):
+              raise SystemExit("V4_DEPLOYMENT_SCOPE_MISMATCH")
+          with Path(os.environ["GITHUB_ENV"]).open("a") as f:
+              f.write("WORKFORCE_MODEL_INDEX_START="+str(model)+"\n")
+              f.write("WORKFORCE_CASE_INDEX_START="+str(case)+"\n")
+              f.write("WORKFORCE_CASES_THIS_PASS="+str(limit)+"\n")
+          print("V4_PREVIOUS_PROTECTED_DEPLOYMENT_VERIFIED=PASS")
+          print("V4_PRIVATE_INPUT_USED=false")
+          PY
+          (cd reviewed-source/cloudflare/shared-nvidia-inference && npm test)
+          node --check reviewed-source/cloudflare/shared-nvidia-inference/scripts/workforce_v4_campaign_cli.mjs
+          node --check reviewed-source/cloudflare/shared-nvidia-inference/local-probe/src/workforce_v4_receipt.js
+      - name: Admit exact existing Cloudflare private Service Binding temporarily
+        shell: bash
+        working-directory: controller
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py enable
+      - name: Execute fixed fictional v4 cases with private Service Binding
+        shell: bash
+        working-directory: reviewed-source/cloudflare/shared-nvidia-inference
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0d5131a1fec357c3317973c24febecee6f98818b"
+          npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_v4_local_private.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 45); do
+            if curl --silent --max-time 2 http://127.0.0.1:8787/ -o /dev/null; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then echo V4_PRIVATE_CALLER_UNAVAILABLE; exit 1; fi
+          node scripts/workforce_v4_campaign_cli.mjs
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("artifacts/nvidia-v4-mechanism/campaign_progress.json")
+          j=json.loads(p.read_text())
+          observations=j.get("observations",[])+j.get("held_attempts",[])
+          if not (j.get("schema")=="commandcenter.workforce_v4_mechanism_campaign.v1" and
+             j.get("source_sha")=="0d5131a1fec357c3317973c24febecee6f98818b" and
+             j.get("run_id")=="github-"+os.environ["GITHUB_RUN_ID"] and
+             j.get("cohort")=="mechanism_v4" and
+             j.get("private_input_used") is False and
+             j.get("raw_responses_stored") is False and
+             j.get("production_admitted") is False and
+             j.get("provider_calls")==len(observations)):
+             raise SystemExit("V4_PUBLIC_ARTIFACT_CONTRACT_INVALID")
+          for r in observations:
+              if not all(r.get(k) is False for k in (
+                "answer_exported","raw_response_exported","private_input_used",
+                "production_admitted","tools_executed","first_pass","full_task_accepted")):
+                  raise SystemExit("V4_MODEL_RESULT_PRIVACY_GUARD_REJECT")
+          print("V4_SANITIZED_ARTIFACT_CONTRACT=PASS")
+          PY
+      - name: Always restore disabled diagnostics and original Secrets Store binding
+        if: always()
+        shell: bash
+        working-directory: controller
+        run: |
+          set -euo pipefail
+          python scripts/nvidia_private_diagnostic_gate_once.py restore
+          echo V4_NVIDIA_DIAGNOSTIC_RESTORED_DISABLED=PASS
+      - name: Export only sanitized fixed fictional metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-v4-synthetic-mechanism-receipts
+          path: reviewed-source/cloudflare/shared-nvidia-inference/artifacts/nvidia-v4-mechanism/campaign_progress.json
+          retention-days: 14
+          if-no-files-found: ignore
