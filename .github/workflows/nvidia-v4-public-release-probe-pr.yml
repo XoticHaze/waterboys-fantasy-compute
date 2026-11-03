@@ -1,4 +1,4 @@
-name: NVIDIA V4 Read-Only Release Run Probe PR
+name: NVIDIA V4 Read-Only Provider Run Probe PR
 # Temporary public metadata discovery for an exact source-pinned push run.
 # No deployment, provider calls, private data, writes or Cloudflare token.
 on:
@@ -27,10 +27,10 @@ jobs:
           from pathlib import Path
           from urllib.request import Request,urlopen
           repo="XoticHaze/waterboys-fantasy-compute"
-          sha="f4011b5ba23a805bb9cbbce9c811f7e1493db4d0"
-          workflow="nvidia-bound-worker-redeploy-preflight-once.yml"
+          sha="9765fe40a73b9bc64fd94e03d557c3ab3ded72af"
+          workflow="nvidia-workforce-shadow-qualification.yml"
           trigger=Path("ops/nvidia_v4_pr_readback_trigger.txt").read_text().strip()
-          expected="probe=v1;release_sha="+sha+";scope=public_metadata_only"
+          expected="probe=v1;target_sha="+sha+";scope=public_metadata_only"
           if trigger!=expected:raise SystemExit("UNTRUSTED_OBSERVER_SELECTOR")
           if os.environ.get("GITHUB_REPOSITORY")!=repo:
               raise SystemExit("WRONG_PUBLIC_REPOSITORY")
@@ -48,20 +48,20 @@ jobs:
           rows=[v for v in doc.get("workflow_runs",[]) if
                 v.get("head_sha")==sha and v.get("event")=="push" and
                 str(v.get("path","")).startswith(".github/workflows/"+workflow)]
-          print("NVIDIA_V4_RELEASE_CANDIDATE_RUNS="+str(len(rows)))
-          if len(rows)!=1:raise SystemExit("NVIDIA_V4_RELEASE_RUN_NOT_UNIQUE_OR_ABSENT")
+          print("NVIDIA_V4_PROVIDER_CANDIDATE_RUNS="+str(len(rows)))
+          if len(rows)!=1:raise SystemExit("NVIDIA_V4_PROVIDER_RUN_NOT_UNIQUE_OR_ABSENT")
           r=rows[0];rid=r["id"]
           jobs=get("/actions/runs/"+str(rid)+"/jobs?per_page=100").get("jobs",[])
           artifacts=get("/actions/runs/"+str(rid)+"/artifacts?per_page=100").get("artifacts",[])
-          j=[x for x in jobs if x.get("name")=="exact-target-bound-redeploy"]
-          if len(j)!=1:raise SystemExit("NVIDIA_V4_RELEASE_JOB_NOT_EXACT")
-          a=[x for x in artifacts if x.get("name")=="nvidia-v4-reviewed-release-version"]
-          print("NVIDIA_V4_RELEASE_RUN_ID="+str(rid))
-          print("NVIDIA_V4_RELEASE_RUN_STATUS="+str(r.get("status")))
-          print("NVIDIA_V4_RELEASE_RUN_CONCLUSION="+str(r.get("conclusion")))
-          print("NVIDIA_V4_RELEASE_JOB_ID="+str(j[0].get("id")))
-          print("NVIDIA_V4_RELEASE_JOB_CONCLUSION="+str(j[0].get("conclusion")))
-          print("NVIDIA_V4_RELEASE_VERSION_ARTIFACT_ID="+str(a[0]["id"] if len(a)==1 else "none"))
-          print("NVIDIA_V4_RELEASE_PRIVATE_INPUT_EXPORTED=false")
-          print("NVIDIA_V4_RELEASE_INFERENCE_PROOF=false")
+          j=[x for x in jobs if x.get("name")=="run-reviewed-v4-synthetic"]
+          if len(j)!=1:raise SystemExit("NVIDIA_V4_PROVIDER_JOB_NOT_EXACT")
+          a=[x for x in artifacts if x.get("name")=="nvidia-v4-synthetic-mechanism-receipts"]
+          print("NVIDIA_V4_PROVIDER_RUN_ID="+str(rid))
+          print("NVIDIA_V4_PROVIDER_RUN_STATUS="+str(r.get("status")))
+          print("NVIDIA_V4_PROVIDER_RUN_CONCLUSION="+str(r.get("conclusion")))
+          print("NVIDIA_V4_PROVIDER_JOB_ID="+str(j[0].get("id")))
+          print("NVIDIA_V4_PROVIDER_JOB_CONCLUSION="+str(j[0].get("conclusion")))
+          print("NVIDIA_V4_PROVIDER_VERSION_ARTIFACT_ID="+str(a[0]["id"] if len(a)==1 else "none"))
+          print("NVIDIA_V4_PROVIDER_PRIVATE_INPUT_EXPORTED=false")
+          print("NVIDIA_V4_PROVIDER_INFERENCE_PROOF=false")
           PY
