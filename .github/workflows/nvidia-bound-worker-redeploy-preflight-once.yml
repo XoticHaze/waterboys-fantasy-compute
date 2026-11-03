@@ -19,10 +19,49 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
+      - name: Require exact separate owner-reviewed v4 release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,re,base64,json
+          from urllib.request import Request,urlopen
+          sha=os.environ.get("GITHUB_SHA","")
+          if not re.fullmatch(r"[a-f0-9]{40}",sha):
+              raise SystemExit("UNTRUSTED_CONTROLLER_REVISION")
+          path="ops/nvidia_authorized_bound_source_deploy_trigger.txt"
+          url="https://api.github.com/repos/XoticHaze/waterboys-fantasy-compute/contents/"+path+"?ref="+sha
+          req=Request(url,headers={"Accept":"application/vnd.github+json","User-Agent":"cc-nvidia-v4-exact-deploy-preflight"})
+          with urlopen(req,timeout=18) as response:
+              doc=json.load(response)
+          raw=base64.b64decode(doc.get("content",""),validate=False).decode("utf-8")
+          fields={}
+          for line in raw.splitlines():
+              if "=" not in line:continue
+              k,v=line.split("=",1)
+              if k in fields:raise SystemExit("DUPLICATED_RELEASE_REQUEST_FIELD")
+              fields[k]=v
+          expected={
+           "reviewed_public_source_sha":"0d5131a1fec357c3317973c24febecee6f98818b",
+           "reviewed_public_source_ci_run":"41589590058",
+           "approval_scope":"existing_private_synthetic_model_research_mechanism_v4_only",
+           "existing_worker":"cc-shared-nvidia-inference",
+           "preserve_bound_NVIDIA_API_KEY_secrets_store_reference":"true",
+           "preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED":"0",
+           "workers_dev":"false",
+           "preview_urls":"false",
+           "private_user_data_or_model_response_export":"false",
+           "no_broker_device_root_customer_actions":"true"
+          }
+          if any(fields.get(k)!=v for k,v in expected.items()):
+              raise SystemExit("REVIEWED_V4_RELEASE_REQUEST_NOT_ADMITTED")
+          print("EXACT_REVIEWED_V4_RELEASE_MANIFEST=PASS")
+          print("PRIVATE_INPUT_USED=false")
+          PY
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: d18a85c78e3db84ffde6d51cb3d785971e6f0a38
+          ref: 0d5131a1fec357c3317973c24febecee6f98818b
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -31,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "d18a85c78e3db84ffde6d51cb3d785971e6f0a38"
+          test "$(git rev-parse HEAD)" = "0d5131a1fec357c3317973c24febecee6f98818b"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
@@ -53,6 +92,12 @@ jobs:
           node --check src/workforce_role_selector.js
           node --check local-probe/src/workforce_receipt.js
           node --check scripts/workforce_campaign_cli.mjs
+          node --check src/workforce_v4_mechanism_holdout.js
+          node --check src/workforce_v4_provider_runner.js
+          node --check src/workforce_v4_grader.js
+          node --check src/workforce_v4_value_gate.js
+          node --check local-probe/src/workforce_v4_receipt.js
+          node --check scripts/workforce_v4_campaign_cli.mjs
       - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
         working-directory: cloudflare/shared-nvidia-inference
         shell: bash
@@ -82,7 +127,7 @@ jobs:
           if not (secret.get('type')=='secrets_store_secret' and secret.get('secret_name')=='NVIDIA_API_KEY'
                   and isinstance(store,str) and re.fullmatch(r'[a-fA-F0-9]{32}',store)):
               raise SystemExit('ACCOUNT_STORE_REFERENCE_NOT_VERIFIED')
-          if flag.get('type')!='plain_text' or flag.get('text') not in ('0','1'):
+          if flag.get('type')!='plain_text' or flag.get('text')!='0':
               raise SystemExit('PRODUCTION_DIAGNOSTIC_FLAG_INVALID')
           observed_flag=flag['text']
           cfg=json.loads(Path('wrangler.jsonc').read_text())
@@ -128,9 +173,55 @@ jobs:
           key=b.get('NVIDIA_API_KEY',{});flag=b.get('CC_NVIDIA_DIAGNOSTIC_ENABLED',{})
           if key.get('type')!='secrets_store_secret' or key.get('secret_name')!='NVIDIA_API_KEY' or not re.fullmatch(r'[a-fA-F0-9]{32}',str(key.get('store_id') or '')):
               raise SystemExit('ACCOUNT_SECRET_BINDING_NOT_PRESERVED')
-          if flag.get('type')!='plain_text' or flag.get('text') not in ('0','1'):
+          if flag.get('type')!='plain_text' or flag.get('text')!='0':
               raise SystemExit('DIAGNOSTIC_FLAG_INVALID_AFTER_DEPLOY')
           print('NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS')
           print('NVIDIA_SECRET_VALUE_ACCESSED=0')
           print('NVIDIA_PROVIDER_CALLS=0')
+          # Bind this release to an observed, actively serving Worker version.
+          # Settings parity alone does not establish deployment identity.
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import uuid
+          url=('https://api.cloudflare.com/client/v4/accounts/'+a+
+              '/workers/scripts/cc-shared-nvidia-inference/deployments')
+          request=Request(url,headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+          with urlopen(request,timeout=20) as response: dep_doc=json.load(response)
+          deps=dep_doc.get('result',{}).get('deployments',[])
+          if dep_doc.get('success') is not True or not isinstance(deps,list) or not deps:
+              raise SystemExit('WORKER_DEPLOYMENT_READBACK_UNAVAILABLE')
+          active=deps[0]
+          versions=active.get('versions',[]) if isinstance(active,dict) else []
+          if not isinstance(versions,list) or len(versions)!=1 or versions[0].get('percentage')!=100:
+              raise SystemExit('WORKER_DEPLOYMENT_NOT_SINGLE_FULL_VERSION')
+          try:
+              deployment_id=str(uuid.UUID(active['id']))
+              version_id=str(uuid.UUID(versions[0]['version_id']))
+              created=datetime.fromisoformat(active['created_on'].replace("Z","+00:00")).astimezone(timezone.utc)
+          except (ValueError,TypeError,KeyError,AttributeError):
+              raise SystemExit('WORKER_ACTIVE_VERSION_ID_INVALID')
+          if created>datetime.now(timezone.utc):
+              raise SystemExit('WORKER_DEPLOYMENT_TIME_IN_FUTURE')
+          proof={
+              "schema":"commandcenter.nvidia_v4_public_synthetic_release_version.v1",
+              "repository":os.environ["GITHUB_REPOSITORY"],"run_id":os.environ["GITHUB_RUN_ID"],
+              "controller_sha":os.environ["GITHUB_SHA"],
+              "reviewed_source_sha":"0d5131a1fec357c3317973c24febecee6f98818b",
+              "worker_name":"cc-shared-nvidia-inference",
+              "deployment_id":deployment_id,"version_id":version_id,
+              "deployment_created_on":active["created_on"],
+              "diagnostic_disabled":True,"secret_reference_preserved":True,
+              "full_model_text_exported":False,"private_input_used":False,
+              "production_admitted":False}
+          Path(os.environ["GITHUB_WORKSPACE"],"nvidia-v4-release-version.json").write_text(
+              json.dumps(proof,sort_keys=True)+"\n",encoding="utf-8")
+          print('NVIDIA_BOUND_WORKER_ACTIVE_DEPLOYMENT=VERIFIED')
+          print('NVIDIA_BOUND_WORKER_VERSION_ID='+version_id)
           PY
+      - name: Publish only bounded synthetic-release version identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-v4-reviewed-release-version
+          path: nvidia-v4-release-version.json
+          retention-days: 14
+          if-no-files-found: error
