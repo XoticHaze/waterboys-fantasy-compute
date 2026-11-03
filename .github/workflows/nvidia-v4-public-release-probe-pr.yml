@@ -1,0 +1,67 @@
+name: NVIDIA V4 Read-Only Release Run Probe PR
+# Temporary public metadata discovery for an exact source-pinned push run.
+# No deployment, provider calls, private data, writes or Cloudflare token.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ops/nvidia_v4_pr_readback_trigger.txt'
+      - '.github/workflows/nvidia-v4-public-release-probe-pr.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect-exact-public-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_READ_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Report only exact public NVIDIA release run and job IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,re
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          repo="XoticHaze/waterboys-fantasy-compute"
+          sha="f4011b5ba23a805bb9cbbce9c811f7e1493db4d0"
+          workflow="nvidia-bound-worker-redeploy-preflight-once.yml"
+          trigger=Path("ops/nvidia_v4_pr_readback_trigger.txt").read_text().strip()
+          expected="probe=v1;release_sha="+sha+";scope=public_metadata_only"
+          if trigger!=expected:raise SystemExit("UNTRUSTED_OBSERVER_SELECTOR")
+          if os.environ.get("GITHUB_REPOSITORY")!=repo:
+              raise SystemExit("WRONG_PUBLIC_REPOSITORY")
+          token=os.environ.get("GH_READ_TOKEN","")
+          if len(token)<12:raise SystemExit("GITHUB_READ_TOKEN_MISSING")
+          def get(relative):
+              if not relative.startswith("/"):raise SystemExit("UNTRUSTED_GITHUB_RELATIVE_PATH")
+              request=Request("https://api.github.com/repos/"+repo+relative,headers={
+                "Authorization":"Bearer "+token,
+                "Accept":"application/vnd.github+json",
+                "X-GitHub-Api-Version":"2022-11-28",
+                "User-Agent":"cc-nvidia-v4-public-release-read-only-probe"})
+              with urlopen(request,timeout=25) as r:return json.load(r)
+          doc=get("/actions/workflows/"+workflow+"/runs?event=push&head_sha="+sha+"&per_page=20")
+          rows=[v for v in doc.get("workflow_runs",[]) if
+                v.get("head_sha")==sha and v.get("event")=="push" and
+                str(v.get("path","")).startswith(".github/workflows/"+workflow)]
+          print("NVIDIA_V4_RELEASE_CANDIDATE_RUNS="+str(len(rows)))
+          if len(rows)!=1:raise SystemExit("NVIDIA_V4_RELEASE_RUN_NOT_UNIQUE_OR_ABSENT")
+          r=rows[0];rid=r["id"]
+          jobs=get("/actions/runs/"+str(rid)+"/jobs?per_page=100").get("jobs",[])
+          artifacts=get("/actions/runs/"+str(rid)+"/artifacts?per_page=100").get("artifacts",[])
+          j=[x for x in jobs if x.get("name")=="exact-target-bound-redeploy"]
+          if len(j)!=1:raise SystemExit("NVIDIA_V4_RELEASE_JOB_NOT_EXACT")
+          a=[x for x in artifacts if x.get("name")=="nvidia-v4-reviewed-release-version"]
+          print("NVIDIA_V4_RELEASE_RUN_ID="+str(rid))
+          print("NVIDIA_V4_RELEASE_RUN_STATUS="+str(r.get("status")))
+          print("NVIDIA_V4_RELEASE_RUN_CONCLUSION="+str(r.get("conclusion")))
+          print("NVIDIA_V4_RELEASE_JOB_ID="+str(j[0].get("id")))
+          print("NVIDIA_V4_RELEASE_JOB_CONCLUSION="+str(j[0].get("conclusion")))
+          print("NVIDIA_V4_RELEASE_VERSION_ARTIFACT_ID="+str(a[0]["id"] if len(a)==1 else "none"))
+          print("NVIDIA_V4_RELEASE_PRIVATE_INPUT_EXPORTED=false")
+          print("NVIDIA_V4_RELEASE_INFERENCE_PROOF=false")
+          PY
