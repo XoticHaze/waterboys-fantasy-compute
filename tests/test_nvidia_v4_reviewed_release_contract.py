@@ -4,6 +4,9 @@ Source tests only. No provider, secret, Actions dispatch or Cloudflare access.
 The workflow and deploy run must be separately accepted by the owning release.
 """
 from pathlib import Path
+import ast
+import re
+import textwrap
 
 ROOT = Path(__file__).resolve().parents[1]
 V4 = ROOT / ".github/workflows/nvidia-workforce-shadow-qualification.yml"
@@ -88,3 +91,33 @@ def test_existing_shared_worker_concurrency_and_least_privileges():
     assert "@@ACCOUNT_ID@@" not in v4
     assert "@@API_TOKEN@@" not in v4
     assert "@@GITHUB_TOKEN@@" not in v4
+
+
+def _embedded_python_blocks(source):
+    """Parse Python heredocs from the actual public workflow steps."""
+    pieces = re.findall(r"          python - <<'PY'\n(.*?)          PY\n", source, re.S)
+    assert pieces, "workflow must retain its source-reviewed Python guards"
+    return [textwrap.dedent(piece) for piece in pieces]
+
+
+def test_v4_preflight_and_deploy_python_scripts_are_syntactically_valid():
+    for name in (V4, DEPLOY):
+        for embedded in _embedded_python_blocks(name.read_text()):
+            ast.parse(embedded, filename=str(name))
+
+
+def test_live_worker_version_must_match_reviewed_release_window():
+    v4 = V4.read_text()
+    deploy = DEPLOY.read_text()
+    assert "/workers/scripts/cc-shared-nvidia-inference/deployments" in v4
+    assert "/workers/scripts/cc-shared-nvidia-inference/deployments" in deploy
+    assert "V4_ACTIVE_DEPLOYMENT_UNVERIFIED" in v4
+    assert "V4_ACTIVE_DEPLOYMENT_NOT_EXACT" in v4
+    assert "V4_ACTIVE_VERSION_NOT_FROM_REVIEWED_RELEASE" in v4
+    assert "start<=created<=finished+timedelta(seconds=90)" in v4
+    assert "WORKER_DEPLOYMENT_READBACK_UNAVAILABLE" in deploy
+    assert "WORKER_DEPLOYMENT_NOT_SINGLE_FULL_VERSION" in deploy
+    assert "NVIDIA_BOUND_WORKER_ACTIVE_DEPLOYMENT=VERIFIED" in deploy
+    assert "nvidia-v4-reviewed-release-version" in deploy
+    assert "secret_reference_preserved" in deploy
+    assert "full_model_text_exported" in deploy
