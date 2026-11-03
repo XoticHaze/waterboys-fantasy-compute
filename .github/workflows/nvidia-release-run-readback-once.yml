@@ -1,0 +1,36 @@
+name: NVIDIA Release Public Run Metadata Readback (one shot)
+# Public metadata observer only. No NVIDIA/Cloudflare secrets or provider calls.
+# Purpose: bridge missing push-run listing in read-only Chat GitHub connector.
+on:
+  push:
+    branches: [main]
+    paths: ['ops/nvidia_release_readback_once.txt']
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: cc-nvidia-release-readback-once
+  cancel-in-progress: false
+jobs:
+  readback-exact-release:
+    if: github.repository == 'XoticHaze/waterboys-fantasy-compute'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Compile only source-owned public-release metadata reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nvidia_release_run_readback_once.py
+          test "$GITHUB_REF" = "refs/heads/main"
+          grep -F 'release_sha=f4011b5ba23a805bb9cbbce9c811f7e1493db4d0' ops/nvidia_release_readback_once.txt >/dev/null
+          grep -F 'worker_source=0d5131a1fec357c3317973c24febecee6f98818b' ops/nvidia_release_readback_once.txt >/dev/null
+      - name: Read verified public run id and publish sanitized reference only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/nvidia_release_run_readback_once.py
