@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .normalize import utc_now
+from .team_lifecycle import team_write_block_reason
 
 
 BLOCKED_INJURY = {"OUT", "INJURY_RESERVE", "DOUBTFUL"}
@@ -537,6 +538,24 @@ def acquisition_roster_blocker(snapshot: dict) -> dict | None:
 
 
 def plan_sniper(snapshot: dict, policy: dict, previous_report: dict | None = None) -> dict:
+    blocked = team_write_block_reason(snapshot)
+    if blocked is not None:
+        return {
+            "schema": "waterboys.sniper_report.v1",
+            "created_at": utc_now(),
+            "snapshot_collected_at": snapshot.get("collected_at"),
+            "mode": str(policy.get("mode") or "shadow"),
+            "enabled": policy.get("enabled") is True,
+            "status": "blocked_team_inactive",
+            "inactivity_reason": blocked,
+            "cancel_actions": [],
+            "selected": [],
+            "acquisition_roster_blocker": None,
+            "blocked_acquisition_opportunities": [],
+            "top_evaluations": [],
+            "observations": {},
+        }
+
     rows = list(((snapshot.get("value_engine") or {}).get("waiver_targets") or []))
     evaluations = [evaluate_candidate(row, snapshot, policy, previous_report) for row in rows]
 
