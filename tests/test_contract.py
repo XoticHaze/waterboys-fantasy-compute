@@ -387,6 +387,7 @@ class ContractTests(unittest.TestCase):
                 "roster": [{"player_id": -16020, "name": "Jets D/ST"}],
             },
             "teams": [{"team_id": 18}],
+            "survival": {"eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
             "free_agents": [],
         }
         command = {
@@ -432,9 +433,10 @@ class ContractTests(unittest.TestCase):
             "waterboys": {
                 "team_id": 18,
                 "acquisition_budget_remaining": 1000,
-                "roster": [],
+                "roster": [{"player_id": 999, "name": "Existing QB", "lineup_slot": "QB"}],
             },
             "teams": [{"team_id": 18}],
+            "survival": {"eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
             "free_agents": [],
         }
         command = {
@@ -470,6 +472,7 @@ class ContractTests(unittest.TestCase):
                 ],
             },
             "teams": [{"team_id": 18}],
+            "survival": {"eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
             "free_agents": [
                 {"player_id": 4569371, "name": "Isaiah Williams"},
                 {"player_id": 4428557, "name": "Tyjae Spears"},
@@ -631,7 +634,7 @@ class ContractTests(unittest.TestCase):
                 ],
             },
             "league": {"roster": {"size": 14}},
-            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "survival": {"waterboys_projected_margin_over_cutline": 30, "eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
         }
         row = {
             "player_id": 20,
@@ -679,7 +682,7 @@ class ContractTests(unittest.TestCase):
                 "roster": [{"player_id": 10, "name": "Drop", "current_week": {"points": None}}],
             },
             "league": {"roster": {"size": 14}},
-            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "survival": {"waterboys_projected_margin_over_cutline": 30, "eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
             "waiver_offers": [{
                 "offer_id": "claim-1",
                 "team_id": 18,
@@ -742,7 +745,7 @@ class ContractTests(unittest.TestCase):
                 "roster": [{"player_id": 10, "name": "Drop", "current_week": {"points": None}}],
             },
             "league": {"roster": {"size": 14}},
-            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "survival": {"waterboys_projected_margin_over_cutline": 30, "eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
             "placement_engine": {
                 "survival_pressure": "green",
                 "best_acquisitions": [
@@ -819,7 +822,7 @@ class ContractTests(unittest.TestCase):
                 "roster": [{"player_id": 10, "current_week": {"points": None}}],
             },
             "league": {"roster": {"size": 14}},
-            "survival": {"waterboys_projected_margin_over_cutline": 30},
+            "survival": {"waterboys_projected_margin_over_cutline": 30, "eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
         }
         row = {
             "player_id": 99,
