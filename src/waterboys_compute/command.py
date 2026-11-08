@@ -10,6 +10,7 @@ from .espn_write import (
     verify_pending_claim,
 )
 from .normalize import utc_now
+from .team_lifecycle import team_write_block_reason
 
 
 def _preflight_node(fresh: dict) -> dict:
@@ -93,6 +94,16 @@ def _execute_one(runtime: dict, command: dict, *, batch_live_allowed: bool = Tru
         }
 
     fresh = collect_snapshot(runtime)
+    blocked = team_write_block_reason(fresh)
+    if blocked is not None:
+        return {
+            "command_id": command_id,
+            "action": action,
+            "status": "blocked_team_inactive",
+            "mutation_attempted": False,
+            "reason": blocked,
+            "preflight": _preflight_node(fresh),
+        }
     validate_preflight(command, fresh)
     body = build_transaction(runtime, command, fresh)
     safe_body = redacted_transaction(body)
