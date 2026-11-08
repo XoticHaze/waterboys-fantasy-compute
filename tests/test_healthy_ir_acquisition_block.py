@@ -48,7 +48,7 @@ def snapshot(ir_status="ACTIVE", roster_limit=1):
             ],
         },
         "league": {"roster": {"size": roster_limit}},
-        "survival": {"waterboys_projected_margin_over_cutline": 56},
+        "survival": {"waterboys_projected_margin_over_cutline": 56, "eliminated_teams": [], "current_week_ranking": [{"team_id": 18}]},
         "placement_engine": {
             "best_acquisitions": [
                 {"player_id": 99, "acquisition_path": "waiver",
