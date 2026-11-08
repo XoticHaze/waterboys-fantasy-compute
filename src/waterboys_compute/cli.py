@@ -8,6 +8,7 @@ from .collector import collect_player_history, collect_snapshot
 from .command import execute_guarded
 from .placement import command_for_lineup_repair, commands_for_lineup_repair
 from .sniper import command_for_cancel, command_for_selection, plan_sniper
+from .team_lifecycle import team_write_block_reason
 
 
 def _lineup_command_signature(command: dict) -> tuple:
@@ -116,6 +117,27 @@ def main() -> int:
     policy = runtime.get("sniper") or {}
     previous = runtime.get("sniper_state")
     live = policy.get("enabled") is True and str(policy.get("mode") or "").lower() == "live"
+    blocked = team_write_block_reason(snapshot)
+    if blocked is not None:
+        # Preserve read-only monitoring but never derive any roster writes
+        # from an eliminated or inconsistent knockout-team snapshot.
+        snapshot_result = broker.publish_snapshot(snapshot)
+        report = plan_sniper(snapshot, policy, previous)
+        report["history_hydration_error"] = None
+        report["executions"] = []
+        report_result = broker.publish_sniper_report(report)
+        print(json.dumps({
+            "WATERBOYS_SNIPER": "inactive",
+            "inactivity_reason": blocked,
+            "selected_count": 0,
+            "cancel_count": 0,
+            "execution_count": 0,
+            "lineup_repair_count": 0,
+            "snapshot_result": snapshot_result,
+            "report_result": report_result,
+        }, sort_keys=True))
+        return 0
+
     executions = []
     lineup_repair_count = 0
 
