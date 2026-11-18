@@ -1,0 +1,6 @@
+schema=commandcenter.factory.inert_first_bootstrap.v1
+source_sha=41e9010a3c6f5b246d712d1f9d0354713487f6f4
+account=ce43cd7b917d98a4bb4866d30eed99c0
+worker=shared-compute-worker-factory
+scope=inert_source_no_secrets_no_signing_no_pi_no_neutral
+approval=MW-20261118105634854
