@@ -1,0 +1,29 @@
+name: CC Existing Shared Factory Read-Only Inventory
+
+# This only performs bounded GETs using the EXISTING ordinary-account token.
+# It does not list token values, create Workers, edit Cloudflare or deploy code.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cc-factory-existing-readonly.yml'
+      - 'scripts/cc_factory_existing_worker_readonly.py'
+
+permissions:
+  contents: read
+
+jobs:
+  existing-factory-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Read only existing factory settings and deployment metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/cc_factory_existing_worker_readonly.py
+          python scripts/cc_factory_existing_worker_readonly.py
