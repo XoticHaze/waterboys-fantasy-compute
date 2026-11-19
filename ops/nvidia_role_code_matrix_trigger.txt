@@ -1,1 +1,1 @@
-job=minimax:4
+matrix=poolside
