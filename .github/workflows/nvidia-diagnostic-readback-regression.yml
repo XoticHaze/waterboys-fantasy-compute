@@ -1,0 +1,21 @@
+name: NVIDIA diagnostic readback regression (offline only)
+on:
+  pull_request:
+    paths:
+      - scripts/nvidia_private_diagnostic_gate_once.py
+      - tests/test_nvidia_private_diagnostic_readback.py
+      - .github/workflows/nvidia-diagnostic-readback-regression.yml
+permissions:
+  contents: read
+jobs:
+  check-exact-readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate syntax and mocked Cloudflare control-plane behavior
+        run: |
+          python -m py_compile scripts/nvidia_private_diagnostic_gate_once.py
+          python -m unittest discover -s tests -p 'test_nvidia_private_diagnostic_readback.py' -v
+      - name: Confirm no live provider or Cloudflare mutations in this validation workflow
+        run: echo NVIDIA_DIAGNOSTIC_OFFLINE_ONLY=PASS

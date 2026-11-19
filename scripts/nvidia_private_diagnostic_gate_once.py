@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sys
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -119,13 +120,36 @@ def set_switch(account, token, target):
         safe_codes = [str(x) for x in codes if type(x) is int and 0 <= x <= 999999]
         print("NVIDIA_PATCH_CLOUDFLARE_ERROR_CODES=" + (",".join(safe_codes[:4]) if safe_codes else "none"))
         fail("WORKER_EXACT_SETTINGS_PATCH_DENIED_OR_FAILED_HTTP_" + str(status if isinstance(status, int) else "transport"))
-    after_key, after_value = read(account, token)
-    if (after_key.get("store_id") != prior_key.get("store_id")
-            or after_value != target):
-        fail("EXACT_BINDING_OR_FLAG_READBACK_MISMATCH")
-    print("NVIDIA_DIAGNOSTIC_FLAG_VERIFIED=" + target)
-    print("NVIDIA_ACCOUNT_SECRETS_STORE_BINDING_PRESERVED=1")
-    print("NVIDIA_SECRET_VALUE_READ=0")
+    # Cloudflare may acknowledge a settings PATCH before the following GET
+    # reflects its active version. Observe only: NEVER repeat the mutation.
+    # A false negative here used to mark a successful synthetic inference run
+    # failed, while the independent recovery guardian later saw the correct 0.
+    # Keep the original exact binding identity and flag acceptance criteria.
+    delays = (0, 1, 2, 3, 5, 8)
+    last_class = "readback_not_observed"
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            time.sleep(delay)
+        try:
+            after_key, after_value = read(account, token)
+        except RuntimeError:
+            # Temporary control-plane GET failures are observation failures,
+            # not permission to skip verification or write a second PATCH.
+            last_class = "settings_read_unavailable_or_invalid"
+            continue
+        if after_key.get("store_id") != prior_key.get("store_id"):
+            last_class = "secret_binding_reference_mismatch"
+            continue
+        if after_value != target:
+            last_class = "diagnostic_flag_not_at_target"
+            continue
+        print("NVIDIA_DIAGNOSTIC_READBACK_ATTEMPTS=" + str(attempt))
+        print("NVIDIA_DIAGNOSTIC_FLAG_VERIFIED=" + target)
+        print("NVIDIA_ACCOUNT_SECRETS_STORE_BINDING_PRESERVED=1")
+        print("NVIDIA_SECRET_VALUE_READ=0")
+        return
+    print("NVIDIA_DIAGNOSTIC_READBACK_HOLD_CLASS=" + last_class)
+    fail("EXACT_BINDING_OR_FLAG_READBACK_MISMATCH")
 
 
 def main():
