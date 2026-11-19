@@ -62,7 +62,24 @@ def test_v4_public_synthetic_workflow_requires_verified_prior_release():
     assert "ops/nvidia_v4_workforce_campaign_trigger.txt" in v4
     assert "WORKFORCE_V4_SOURCE_SHA: " + SOURCE in v4
     assert "ops/nvidia_workforce_campaign_trigger.txt" not in v4
-    assert not V4_TRIGGER.exists()  # the PR must not start a provider session
+    # The approved V4 trigger is now an intentionally persisted main-branch
+    # selector. Earlier pre-release tests incorrectly required it to be absent,
+    # causing ALL unrelated public PR CI to fail after the first V4 execution.
+    # Its mere presence never starts a run: the actual workflow is main-push
+    # path-scoped and independently verifies the approved release and source.
+    if V4_TRIGGER.exists():
+        selector = re.fullmatch(
+            r"campaign=v4;source=" + SOURCE
+            + r";model=(25|53);case=([0-9]{1,2});limit=([1-4]);"
+              r"release_run=([0-9]{8,20});release_sha=([a-f0-9]{40});"
+              r"nonce=([A-Za-z0-9_-]{12,64})",
+            V4_TRIGGER.read_text().strip(),
+        )
+        assert selector is not None, "V4 selector must remain source-pinned and bounded"
+        model, first, size, release_run, release_sha, nonce = selector.groups()
+        first, size = int(first), int(size)
+        assert first < 60 and first + size <= 60
+        assert first // 20 == (first + size - 1) // 20
     assert 'test "$GITHUB_RUN_ATTEMPT" = "1"' in v4
     assert 'run.get("conclusion")=="success"' in v4
     assert 'run.get("run_attempt")==1' in v4
