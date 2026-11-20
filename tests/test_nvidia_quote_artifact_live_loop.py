@@ -3,7 +3,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
 from nvidia_quote_artifact_live_loop import (
  ARGS,CASES,TRAIN,HOLD,reference,score,failures_for_revision,
- score_pair,outcome
+ score_pair,outcome,validate_step
 )
 GOOD="""def quote_price_cents(minutes, hourly_cents, travel_cents, supplies_cents, overhead_bps, margin_bps):
     if min(minutes, hourly_cents, travel_cents) < 0 or min(supplies_cents, overhead_bps, margin_bps) < 0 or overhead_bps > 10000 or margin_bps >= 10000:
@@ -50,6 +50,11 @@ class QuoteArtifactTests(unittest.TestCase):
   a,b,keep=score_pair(BROKEN,GOOD)
   self.assertTrue(keep)
   self.assertEqual(outcome(a,b,keep),"ACCEPTED_REVIEW_READY")
+ def test_pre_model_errors_are_categorized_without_raw_data(self):
+  with self.assertRaisesRegex(RuntimeError,"QUOTE_CALLER_UPSTREAM_QUOTE_STEP_SELECTOR_REJECTED"):
+   validate_step({"error":"upstream_quote_step_selector_rejected"},0)
+  with self.assertRaisesRegex(RuntimeError,"QUOTE_CALLER_UNCLASSIFIED"):
+   validate_step({"error":"Bearer SECRET"},0)
  def test_origin_task_stays_public_synthetic(self):
   self.assertEqual(ARGS,("minutes","hourly_cents","travel_cents","supplies_cents","overhead_bps","margin_bps"))
 if __name__=="__main__":unittest.main()
