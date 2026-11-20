@@ -4,6 +4,7 @@ on:
     paths:
       - 'experiments/nvidia-agent-artifact-v1/**'
       - 'tests/test_nvidia_agent_artifact_review.py'
+      - 'tests/test_nvidia_agent_utility_gate.py'
       - '.github/workflows/nvidia-agent-artifact-review.yml'
 permissions:
   contents: read
@@ -19,6 +20,8 @@ jobs:
       - name: Reverify model-created source with independent AST-only interpreter
         run: |
           python -m unittest discover -s tests -p 'test_nvidia_agent_artifact_review.py' -v
+          python -m unittest discover -s tests -p 'test_nvidia_agent_utility_gate.py' -v
           python experiments/nvidia-agent-artifact-v1/verify_artifact.py
+          python experiments/nvidia-agent-artifact-v1/select_utility.py
       - name: Confirm research-only boundaries
         run: echo PUBLIC_SYNTHETIC_SOURCE_ONLY_NO_MODEL_CODE_EXECUTION=PASS
