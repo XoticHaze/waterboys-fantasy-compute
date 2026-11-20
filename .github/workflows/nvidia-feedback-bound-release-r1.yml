@@ -18,6 +18,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GITHUB_API_READ_TOKEN: ${{ github.token }}
     steps:
       - name: Require exact separately reviewed feedback release request
         shell: bash
@@ -31,7 +32,12 @@ jobs:
               raise SystemExit("UNTRUSTED_CONTROLLER_REVISION")
           path="ops/nvidia_feedback_bound_release_trigger.txt"
           url="https://api.github.com/repos/XoticHaze/waterboys-fantasy-compute/contents/"+path+"?ref="+sha
-          req=Request(url,headers={"Accept":"application/vnd.github+json","User-Agent":"cc-nvidia-feedback-exact-deploy-preflight"})
+          token=os.environ.get("GITHUB_API_READ_TOKEN","")
+          if not isinstance(token,str) or len(token)<10:
+              raise SystemExit("RELEASE_READONLY_GITHUB_IDENTITY_MISSING")
+          req=Request(url,headers={"Accept":"application/vnd.github+json",
+              "User-Agent":"cc-nvidia-feedback-exact-deploy-preflight",
+              "Authorization":"Bearer "+token})
           with urlopen(req,timeout=18) as response:
               doc=json.load(response)
           raw=base64.b64decode(doc.get("content",""),validate=False).decode("utf-8")
