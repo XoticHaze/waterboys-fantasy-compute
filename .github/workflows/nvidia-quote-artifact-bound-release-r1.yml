@@ -48,8 +48,8 @@ jobs:
               if k in fields:raise SystemExit("DUPLICATED_RELEASE_REQUEST_FIELD")
               fields[k]=v
           expected={
-           "reviewed_public_source_sha":"38f8c668a8e05f261cf9fe3dce73fd0e49c099a3",
-           "reviewed_public_source_ci_run":"44714559264",
+           "reviewed_public_source_sha":"d73435149598c5b4b03e7324984c1f93b0040295",
+           "reviewed_public_source_ci_run":"44716485070",
            "approval_scope":"existing_private_synthetic_quote_artifact_revision_only",
            "existing_worker":"cc-shared-nvidia-inference",
            "preserve_bound_NVIDIA_API_KEY_secrets_store_reference":"true",
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 38f8c668a8e05f261cf9fe3dce73fd0e49c099a3
+          ref: d73435149598c5b4b03e7324984c1f93b0040295
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -76,7 +76,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "38f8c668a8e05f261cf9fe3dce73fd0e49c099a3"
+          test "$(git rev-parse HEAD)" = "d73435149598c5b4b03e7324984c1f93b0040295"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
@@ -208,7 +208,7 @@ jobs:
               "schema":"commandcenter.nvidia_quote_artifact_public_synthetic_release_version.v1",
               "repository":os.environ["GITHUB_REPOSITORY"],"run_id":os.environ["GITHUB_RUN_ID"],
               "controller_sha":os.environ["GITHUB_SHA"],
-              "reviewed_source_sha":"38f8c668a8e05f261cf9fe3dce73fd0e49c099a3",
+              "reviewed_source_sha":"d73435149598c5b4b03e7324984c1f93b0040295",
               "worker_name":"cc-shared-nvidia-inference",
               "deployment_id":deployment_id,"version_id":version_id,
               "deployment_created_on":active["created_on"],
