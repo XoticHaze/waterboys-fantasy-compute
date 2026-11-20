@@ -1,0 +1,24 @@
+name: NVIDIA Quote Artifact Revision Independent Offline Contract
+on:
+  pull_request:
+    paths:
+      - scripts/nvidia_quote_artifact_live_loop.py
+      - tests/test_nvidia_quote_artifact_live_loop.py
+      - .github/workflows/nvidia-quote-artifact-offline.yml
+      - .github/workflows/nvidia-quote-artifact-live-r1.yml
+      - .github/workflows/nvidia-quote-artifact-bound-release-r1.yml
+permissions:
+  contents: read
+jobs:
+  independently-score-fixed-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Run source-only quote oracle and AST negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nvidia_quote_artifact_live_loop.py
+          python3 -m unittest discover -s tests -p 'test_nvidia_quote_artifact_live_loop.py' -v
+          echo NVIDIA_QUOTE_SOURCE_OFFLINE_ACCEPTED=PASS

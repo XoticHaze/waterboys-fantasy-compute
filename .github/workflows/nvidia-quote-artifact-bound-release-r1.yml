@@ -1,0 +1,229 @@
+name: NVIDIA Fictional Quote Artifact Bound Source Release (owner-reviewed exact source)
+# Existing private Worker only. Public-fictional paired-feedback source pinned; no models, keys or new routes.
+# Strictly separate source release from later private Service Binding inference qualification.
+# The Store ID comes from authenticated Worker binding readback, never chat/CI logs.
+on:
+  push:
+    branches: [main]
+    paths: ['ops/nvidia_quote_artifact_bound_release_trigger.txt']
+permissions:
+  contents: read
+concurrency:
+  group: cc-shared-nvidia-private-controlled-provider-test
+  cancel-in-progress: false
+jobs:
+  exact-target-bound-redeploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GITHUB_API_READ_TOKEN: ${{ github.token }}
+    steps:
+      - name: Require exact separately reviewed feedback release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,re,base64,json
+          from urllib.request import Request,urlopen
+          sha=os.environ.get("GITHUB_SHA","")
+          if not re.fullmatch(r"[a-f0-9]{40}",sha):
+              raise SystemExit("UNTRUSTED_CONTROLLER_REVISION")
+          path="ops/nvidia_quote_artifact_bound_release_trigger.txt"
+          url="https://api.github.com/repos/XoticHaze/waterboys-fantasy-compute/contents/"+path+"?ref="+sha
+          token=os.environ.get("GITHUB_API_READ_TOKEN","")
+          if not isinstance(token,str) or len(token)<10:
+              raise SystemExit("RELEASE_READONLY_GITHUB_IDENTITY_MISSING")
+          req=Request(url,headers={"Accept":"application/vnd.github+json",
+              "User-Agent":"cc-nvidia-feedback-exact-deploy-preflight",
+              "Authorization":"Bearer "+token})
+          with urlopen(req,timeout=18) as response:
+              doc=json.load(response)
+          raw=base64.b64decode(doc.get("content",""),validate=False).decode("utf-8")
+          fields={}
+          for line in raw.splitlines():
+              if "=" not in line:continue
+              k,v=line.split("=",1)
+              if k in fields:raise SystemExit("DUPLICATED_RELEASE_REQUEST_FIELD")
+              fields[k]=v
+          expected={
+           "reviewed_public_source_sha":"38f8c668a8e05f261cf9fe3dce73fd0e49c099a3",
+           "reviewed_public_source_ci_run":"44714559264",
+           "approval_scope":"existing_private_synthetic_quote_artifact_revision_only",
+           "existing_worker":"cc-shared-nvidia-inference",
+           "preserve_bound_NVIDIA_API_KEY_secrets_store_reference":"true",
+           "preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED":"0",
+           "workers_dev":"false",
+           "preview_urls":"false",
+           "private_user_data_or_model_response_export":"false",
+           "no_broker_device_root_customer_actions":"true"
+          }
+          if any(fields.get(k)!=v for k,v in expected.items()):
+              raise SystemExit("REVIEWED_FEEDBACK_RELEASE_REQUEST_NOT_ADMITTED")
+          print("EXACT_REVIEWED_QUOTE_ARTIFACT_RELEASE_MANIFEST=PASS")
+          print("PRIVATE_INPUT_USED=false")
+          PY
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: 38f8c668a8e05f261cf9fe3dce73fd0e49c099a3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify exact reviewed feedback source and known offline contracts
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "38f8c668a8e05f261cf9fe3dce73fd0e49c099a3"
+          npm test
+          node --check src/index.js
+          node --check src/provider_pacing_queue.js
+          node --check src/micro_worker_fixtures.js
+          node --check src/micro_worker_benchmark.js
+          node --check src/draft_pilot_runner.js
+          node --check src/fixed_code_repair_fixture.js
+          node --check src/fixed_code_repair_runner.js
+          node --check src/code_role_suite.js
+          node --check src/code_role_suite_runner.js
+          node --check local-probe/src/code_role_receipt.js
+          node --check local-probe/src/code_receipt.js
+          node --check src/draft_pilot_fixtures.js
+          node --check local-probe/src/draft_receipt.js
+          node --check local-probe/src/index.js
+          node --check local-probe/src/micro_receipt.js
+          node --check src/micro_feedback_holdouts.js
+          node --check src/micro_feedback_runner.js
+          node --check local-probe/src/feedback_caller.js
+          node --check local-probe/src/feedback_receipt.js
+          node --check local-probe/src/feedback_summary.js
+          node --check src/quote_artifact_loop.js
+          node --check local-probe/src/quote_artifact_caller.js
+      - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          a=os.environ.get('CLOUDFLARE_ACCOUNT_ID','')
+          t=os.environ.get('CLOUDFLARE_API_TOKEN','')
+          if not re.fullmatch(r'[a-fA-F0-9]{32}',a) or not t: raise SystemExit('TRUSTED_COMPUTE_IDENTITY_MISSING')
+          def read(name):
+              req=Request('https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/'+name+'/settings',
+                  headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+              with urlopen(req,timeout=16) as r: doc=json.load(r)
+              if doc.get('success') is not True: raise SystemExit('CLOUDFLARE_READBACK_FAILED')
+              return doc.get('result',{})
+          if not isinstance(read('waterboys-fantasy-broker'),dict): raise SystemExit('WRONG_ACCOUNT')
+          prior=read('cc-shared-nvidia-inference')
+          rows=prior.get('bindings',[])
+          if not isinstance(rows,list) or len(rows)!=2: raise SystemExit('WORKER_BINDING_COUNT_MISMATCH')
+          b={v.get('name'):v for v in rows if isinstance(v,dict)}
+          if set(b)!={'NVIDIA_API_KEY','CC_NVIDIA_DIAGNOSTIC_ENABLED'}: raise SystemExit('UNEXPECTED_BINDING_NAME')
+          secret=b['NVIDIA_API_KEY'];flag=b['CC_NVIDIA_DIAGNOSTIC_ENABLED']
+          store=secret.get('store_id')
+          if not (secret.get('type')=='secrets_store_secret' and secret.get('secret_name')=='NVIDIA_API_KEY'
+                  and isinstance(store,str) and re.fullmatch(r'[a-fA-F0-9]{32}',store)):
+              raise SystemExit('ACCOUNT_STORE_REFERENCE_NOT_VERIFIED')
+          if flag.get('type')!='plain_text' or flag.get('text')!='0':
+              raise SystemExit('PRODUCTION_DIAGNOSTIC_FLAG_INVALID')
+          observed_flag=flag['text']
+          cfg=json.loads(Path('wrangler.jsonc').read_text())
+          if not (cfg.get('name')=='cc-shared-nvidia-inference' and cfg.get('workers_dev') is False
+                  and cfg.get('preview_urls') is False and cfg.get('vars',{}).get('CC_NVIDIA_DIAGNOSTIC_ENABLED')=='0'
+                  and 'secrets_store_secrets' not in cfg):
+              raise SystemExit('REVIEWED_PRIVATE_SOURCE_MANIFEST_MISMATCH')
+          cfg['vars']['CC_NVIDIA_DIAGNOSTIC_ENABLED']=observed_flag
+          cfg['secrets_store_secrets']=[{'binding':'NVIDIA_API_KEY','store_id':store,
+                                         'secret_name':'NVIDIA_API_KEY'}]
+          Path('wrangler.bound.jsonc').write_text(json.dumps(cfg,indent=2)+'\n')
+          print('EPHEMERAL_BOUND_MANIFEST=VALIDATED')
+          print('TRUSTED_ACCOUNT_SECRET_REFERENCE=EXISTING_ONLY')
+          print('PRODUCTION_DIAGNOSTIC_VALUE_PRESERVED=' + observed_flag)
+          PY
+      - name: Replay exactly existing reviewed code with preserved Secrets Store binding
+        working-directory: cloudflare/shared-nvidia-inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npx --yes wrangler@4.151.3 deploy --config wrangler.bound.jsonc \
+              > "$RUNNER_TEMP/nvidia-bound-redeploy.log" 2>&1; then
+            echo 'NVIDIA_BOUND_REDEPLOY=REJECTED'
+            echo 'NVIDIA_BOUND_WORKER_UNCHANGED_UNLESS_CLOUDFLARE_CONTROL_READBACK_DISAGREES'
+            exit 1
+          fi
+          echo 'NVIDIA_BOUND_REDEPLOY=ACCEPTED'
+      - name: Confirm exact binding and disabled diagnostic after deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,json,re
+          from urllib.request import Request,urlopen
+          a=os.environ['CLOUDFLARE_ACCOUNT_ID'];t=os.environ['CLOUDFLARE_API_TOKEN']
+          req=Request('https://api.cloudflare.com/client/v4/accounts/'+a+'/workers/scripts/cc-shared-nvidia-inference/settings',
+              headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+          with urlopen(req,timeout=20) as r: doc=json.load(r)
+          if doc.get('success') is not True: raise SystemExit('READBACK_UNAVAILABLE')
+          rows=doc.get('result',{}).get('bindings',[])
+          if len(rows)!=2: raise SystemExit('UNEXPECTED_BINDING_COUNT')
+          b={x.get('name'):x for x in rows if isinstance(x,dict)}
+          key=b.get('NVIDIA_API_KEY',{});flag=b.get('CC_NVIDIA_DIAGNOSTIC_ENABLED',{})
+          if key.get('type')!='secrets_store_secret' or key.get('secret_name')!='NVIDIA_API_KEY' or not re.fullmatch(r'[a-fA-F0-9]{32}',str(key.get('store_id') or '')):
+              raise SystemExit('ACCOUNT_SECRET_BINDING_NOT_PRESERVED')
+          if flag.get('type')!='plain_text' or flag.get('text')!='0':
+              raise SystemExit('DIAGNOSTIC_FLAG_INVALID_AFTER_DEPLOY')
+          print('NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS')
+          print('NVIDIA_SECRET_VALUE_ACCESSED=0')
+          print('NVIDIA_PROVIDER_CALLS=0')
+          # Bind this release to an observed, actively serving Worker version.
+          # Settings parity alone does not establish deployment identity.
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import uuid
+          url=('https://api.cloudflare.com/client/v4/accounts/'+a+
+              '/workers/scripts/cc-shared-nvidia-inference/deployments')
+          request=Request(url,headers={'Authorization':'Bearer '+t,'Accept':'application/json'})
+          with urlopen(request,timeout=20) as response: dep_doc=json.load(response)
+          deps=dep_doc.get('result',{}).get('deployments',[])
+          if dep_doc.get('success') is not True or not isinstance(deps,list) or not deps:
+              raise SystemExit('WORKER_DEPLOYMENT_READBACK_UNAVAILABLE')
+          active=deps[0]
+          versions=active.get('versions',[]) if isinstance(active,dict) else []
+          if not isinstance(versions,list) or len(versions)!=1 or versions[0].get('percentage')!=100:
+              raise SystemExit('WORKER_DEPLOYMENT_NOT_SINGLE_FULL_VERSION')
+          try:
+              deployment_id=str(uuid.UUID(active['id']))
+              version_id=str(uuid.UUID(versions[0]['version_id']))
+              created=datetime.fromisoformat(active['created_on'].replace("Z","+00:00")).astimezone(timezone.utc)
+          except (ValueError,TypeError,KeyError,AttributeError):
+              raise SystemExit('WORKER_ACTIVE_VERSION_ID_INVALID')
+          if created>datetime.now(timezone.utc):
+              raise SystemExit('WORKER_DEPLOYMENT_TIME_IN_FUTURE')
+          proof={
+              "schema":"commandcenter.nvidia_quote_artifact_public_synthetic_release_version.v1",
+              "repository":os.environ["GITHUB_REPOSITORY"],"run_id":os.environ["GITHUB_RUN_ID"],
+              "controller_sha":os.environ["GITHUB_SHA"],
+              "reviewed_source_sha":"38f8c668a8e05f261cf9fe3dce73fd0e49c099a3",
+              "worker_name":"cc-shared-nvidia-inference",
+              "deployment_id":deployment_id,"version_id":version_id,
+              "deployment_created_on":active["created_on"],
+              "diagnostic_disabled":True,"secret_reference_preserved":True,
+              "full_model_text_exported":False,"private_input_used":False,
+              "production_admitted":False}
+          Path(os.environ["GITHUB_WORKSPACE"],"nvidia-quote-artifact-release-version.json").write_text(
+              json.dumps(proof,sort_keys=True)+"\n",encoding="utf-8")
+          print('NVIDIA_BOUND_WORKER_ACTIVE_DEPLOYMENT=VERIFIED')
+          print('NVIDIA_BOUND_WORKER_VERSION_ID='+version_id)
+          PY
+      - name: Publish only bounded synthetic-release version identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-quote-artifact-reviewed-release-version
+          path: nvidia-quote-artifact-release-version.json
+          retention-days: 14
+          if-no-files-found: error
