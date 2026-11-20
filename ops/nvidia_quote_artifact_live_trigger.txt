@@ -1,1 +1,1 @@
-quote=live;source=38f8c668a8e05f261cf9fe3dce73fd0e49c099a3;release_run=44715781137;release_sha=87fc06badf931e266d0b92f1ef3481e37bbe1056;nonce=MW-20261120094538084-quote-first
+quote=live;source=d73435149598c5b4b03e7324984c1f93b0040295;release_run=44716927683;release_sha=0a9551cd6585858de27ba77aec00a84eef41e76e;nonce=MW-20261120094538084-quote-fixed-length
