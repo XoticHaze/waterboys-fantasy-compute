@@ -81,7 +81,7 @@ jobs:
               "/contents/.github/workflows/nvidia-feedback-bound-release-r1.yml?ref="+release_sha)
           workflow=base64.b64decode(w.get("content","")).decode("utf-8")
           if not ("ref: f3bf6c1be42e0dc0b27707dc0a8df047d7106976" in workflow and
-              "EXACT_REVIEWED_V4_RELEASE_MANIFEST=PASS" in workflow and
+              "EXACT_REVIEWED_FEEDBACK_RELEASE_MANIFEST=PASS" in workflow and
               "flag.get('text')!='0'" in workflow):
               raise SystemExit("V4_RELEASE_WORKFLOW_SOURCE_NOT_VERIFIED")
           # Confirm the exact Worker version actively serving was created
