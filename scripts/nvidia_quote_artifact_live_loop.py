@@ -58,6 +58,16 @@ def score(source):
     return {**data,"source_ast_admitted":True}
 
 def validate_step(value,stage):
+    if isinstance(value,dict) and isinstance(value.get("error"),str):
+        allowed={
+          "invalid_selector","binding_unavailable","binding_transport_unavailable",
+          "invalid_receipt","untrusted_receipt","invalid_source_receipt",
+          "upstream_quote_step_selector_rejected","upstream_diagnostic_not_admitted",
+          "upstream_binding_unavailable","upstream_secret_unavailable",
+          "upstream_unavailable","upstream_unclassified"
+        }
+        error=value["error"]
+        raise RuntimeError("QUOTE_CALLER_"+(error.upper() if error in allowed else "UNCLASSIFIED"))
     if not isinstance(value,dict) or any(value.get(k)!=v for k,v in {
       "schema":SCHEMA,"stage":stage,"model":MODEL,"provider_calls":1,
       "private_input_used":False,"model_code_executed":False,
