@@ -19,7 +19,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - name: Require exact separate owner-reviewed v4 release request
+      - name: Require exact separately reviewed feedback release request
         shell: bash
         run: |
           set -euo pipefail
@@ -31,7 +31,7 @@ jobs:
               raise SystemExit("UNTRUSTED_CONTROLLER_REVISION")
           path="ops/nvidia_feedback_bound_release_trigger.txt"
           url="https://api.github.com/repos/XoticHaze/waterboys-fantasy-compute/contents/"+path+"?ref="+sha
-          req=Request(url,headers={"Accept":"application/vnd.github+json","User-Agent":"cc-nvidia-v4-exact-deploy-preflight"})
+          req=Request(url,headers={"Accept":"application/vnd.github+json","User-Agent":"cc-nvidia-feedback-exact-deploy-preflight"})
           with urlopen(req,timeout=18) as response:
               doc=json.load(response)
           raw=base64.b64decode(doc.get("content",""),validate=False).decode("utf-8")
@@ -54,8 +54,8 @@ jobs:
            "no_broker_device_root_customer_actions":"true"
           }
           if any(fields.get(k)!=v for k,v in expected.items()):
-              raise SystemExit("REVIEWED_V4_RELEASE_REQUEST_NOT_ADMITTED")
-          print("EXACT_REVIEWED_V4_RELEASE_MANIFEST=PASS")
+              raise SystemExit("REVIEWED_FEEDBACK_RELEASE_REQUEST_NOT_ADMITTED")
+          print("EXACT_REVIEWED_FEEDBACK_RELEASE_MANIFEST=PASS")
           print("PRIVATE_INPUT_USED=false")
           PY
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Verify exact unchanged production source and known offline contracts
+      - name: Verify exact reviewed feedback source and known offline contracts
         working-directory: cloudflare/shared-nvidia-inference
         shell: bash
         run: |
@@ -87,17 +87,6 @@ jobs:
           node --check local-probe/src/draft_receipt.js
           node --check local-probe/src/index.js
           node --check local-probe/src/micro_receipt.js
-          node --check src/workforce_domain_suite.js
-          node --check src/workforce_provider_runner.js
-          node --check src/workforce_role_selector.js
-          node --check local-probe/src/workforce_receipt.js
-          node --check scripts/workforce_campaign_cli.mjs
-          node --check src/workforce_v4_mechanism_holdout.js
-          node --check src/workforce_v4_provider_runner.js
-          node --check src/workforce_v4_grader.js
-          node --check src/workforce_v4_value_gate.js
-          node --check local-probe/src/workforce_v4_receipt.js
-          node --check scripts/workforce_v4_campaign_cli.mjs
           node --check src/micro_feedback_holdouts.js
           node --check src/micro_feedback_runner.js
           node --check local-probe/src/feedback_caller.js
