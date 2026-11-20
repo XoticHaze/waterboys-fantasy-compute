@@ -1,0 +1,17 @@
+2026-11-20 OWNER_REQUESTED_BOUND_SYNTHETIC_NVIDIA_FEEDBACK_RELEASE
+manual_worker_run=MW-20261120090948735
+reviewed_public_source_sha=f3bf6c1be42e0dc0b27707dc0a8df047d7106976
+reviewed_public_source_ci_run=44685447422
+approval_scope=existing_private_synthetic_changed_fact_feedback_only
+existing_worker=cc-shared-nvidia-inference
+preserve_bound_NVIDIA_API_KEY_secrets_store_reference=true
+preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED=0
+workers_dev=false
+preview_urls=false
+private_user_data_or_model_response_export=false
+no_broker_device_root_customer_actions=true
+accepted_research_pr=XoticHaze/research-compute-public-#2168
+accepted_release_workflow_pr=XoticHaze/waterboys-fantasy-compute#62
+operator_go_ahead=run_live_synthetic_feedback_loops_and_correct
+release_request_created_utc=2026-11-20T09:29:43.783Z
+Rationale: One pre-reviewed private-bound source update is a prerequisite to model feedback experiments. Existing cloud identity, secret reference, disabled flag, and private-only routes must remain preserved. No model execution during release.
