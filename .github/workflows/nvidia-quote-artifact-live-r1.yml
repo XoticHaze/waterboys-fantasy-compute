@@ -19,7 +19,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       GITHUB_API_READ_TOKEN: ${{ github.token }}
-      QUOTE_ARTIFACT_SOURCE_SHA: 38f8c668a8e05f261cf9fe3dce73fd0e49c099a3
+      QUOTE_ARTIFACT_SOURCE_SHA: d73435149598c5b4b03e7324984c1f93b0040295
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: 38f8c668a8e05f261cf9fe3dce73fd0e49c099a3
+          ref: d73435149598c5b4b03e7324984c1f93b0040295
           path: reviewed-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -37,12 +37,12 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_RUN_ATTEMPT" = "1"
-          test "$(git -C reviewed-source rev-parse HEAD)" = "38f8c668a8e05f261cf9fe3dce73fd0e49c099a3"
+          test "$(git -C reviewed-source rev-parse HEAD)" = "d73435149598c5b4b03e7324984c1f93b0040295"
           python - <<'PY'
           import os,re,json,base64
           from pathlib import Path
           from urllib.request import Request,urlopen
-          sha="38f8c668a8e05f261cf9fe3dce73fd0e49c099a3"
+          sha="d73435149598c5b4b03e7324984c1f93b0040295"
           cfg=json.loads(Path("reviewed-source/cloudflare/shared-nvidia-inference/wrangler.jsonc").read_text())
           if not (cfg.get("name")=="cc-shared-nvidia-inference" and
                   cfg.get("workers_dev") is False and cfg.get("preview_urls") is False and
@@ -77,7 +77,7 @@ jobs:
           w=github("https://api.github.com/repos/"+repo+
               "/contents/.github/workflows/nvidia-quote-artifact-bound-release-r1.yml?ref="+release_sha)
           workflow=base64.b64decode(w.get("content","")).decode("utf-8")
-          if not ("ref: 38f8c668a8e05f261cf9fe3dce73fd0e49c099a3" in workflow and
+          if not ("ref: d73435149598c5b4b03e7324984c1f93b0040295" in workflow and
               "EXACT_REVIEWED_QUOTE_ARTIFACT_RELEASE_MANIFEST=PASS" in workflow and
               "flag.get('text')!='0'" in workflow):
               raise SystemExit("V4_RELEASE_WORKFLOW_SOURCE_NOT_VERIFIED")
@@ -140,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           export CI=true
-          test "$(git rev-parse HEAD)" = "38f8c668a8e05f261cf9fe3dce73fd0e49c099a3"
+          test "$(git rev-parse HEAD)" = "d73435149598c5b4b03e7324984c1f93b0040295"
           python3 -m py_compile "$GITHUB_WORKSPACE/controller/scripts/nvidia_quote_artifact_live_loop.py"
           python3 -m unittest discover -s "$GITHUB_WORKSPACE/controller/tests" -p 'test_nvidia_quote_artifact_live_loop.py' -v
           node --check local-probe/src/quote_artifact_caller.js
