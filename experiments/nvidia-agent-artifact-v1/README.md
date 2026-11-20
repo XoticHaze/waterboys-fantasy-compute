@@ -16,3 +16,9 @@
 ## Separation of evidence and execution
 
 The model-generated source is never imported, compiled or evaluated as Python. The reusable `scripts/nvidia_fixed_code_repair_work.py` AST interpreter scores safe expressions only. Exact original run/job identity must still be checked against GitHub separately; the file's self-reported IDs are not a cryptographic attestation. The source and README are public fictional examples only; the target future agent-artifact lifecycle will need a sandbox, independent tests, feedback revision, authorizing consumer and durable receipt before real-world use.
+
+## Task-specific utility, not one global model ranking
+
+The same Poolside model passed **150/150 static code behavior checks**, but passed only **21/24** fixed orchestration decisions (**11/12 protected**) and only **1/4** fictional drafting checks compared with **4/4** for deterministic templates in independently observed live [draft run #44685699867](https://github.com/XoticHaze/waterboys-fantasy-compute/actions/runs/44685699867). This is a small, task-specific comparison with no human qualitative grading, not a model-wide verdict.
+
+`capability_evidence.json` freezes the three observed score groups and their source run IDs. Run `python experiments/nvidia-agent-artifact-v1/select_utility.py` for the fail-closed, advisory-only decision: **static code source for review**, **deterministic routing for protected actions**, and **templates for these narrow drafting jobs**. The gate rejects changed scores or claimed privileged actions. It neither selects an execution plane nor activates a provider or sends customer messages.
