@@ -49,7 +49,7 @@ class CodeRejected(ValueError):pass
 def reject(message="UNTRUSTED_MODEL_CODE"):
     raise CodeRejected(message)
 
-def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
+def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS, max_ast_nodes=120, max_local_names=4):
     if not isinstance(code,str) or not 75<=len(code)<=1051 or code.count("\n")>24:
         reject()
     if any(ord(x)>127 for x in code) or "\t" in code or "#" in code or "\r" in code:
@@ -66,7 +66,9 @@ def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
         any(x.annotation is not None for x in f.args.args)):
         reject()
     nodes=list(ast.walk(f))
-    if len(nodes)>120:reject("AST_COMPLEXITY_LIMIT")
+    if type(max_ast_nodes) is not int or not 20<=max_ast_nodes<=160:reject("AST_COMPLEXITY_POLICY_INVALID")
+    if type(max_local_names) is not int or not 0<=max_local_names<=5:reject("AST_LOCAL_POLICY_INVALID")
+    if len(nodes)>max_ast_nodes:reject("AST_COMPLEXITY_LIMIT")
     # Local scalar assignments are ordinary Python code, not side effects.
     # Admit at most four simple non-reserved names in the AST-only interpreter.
     locals_set=set()
@@ -80,7 +82,7 @@ def parse_subset(code, *, function_name="retry_delay_ms", args=ARGUMENTS):
                 or name.startswith("_")):
                 reject("AST_INVALID_ASSIGNMENT")
             locals_set.add(name)
-    if len(locals_set)>4:reject("AST_TOO_MANY_LOCALS")
+    if len(locals_set)>max_local_names:reject("AST_TOO_MANY_LOCALS")
     statements=(ast.If,ast.Return,ast.Assign)
     expressions=(ast.Name,ast.Load,ast.Constant,ast.BinOp,ast.BoolOp,ast.Compare,
                  ast.UnaryOp,ast.IfExp,ast.Call,ast.And,ast.Or,ast.Add,ast.Sub,
@@ -193,8 +195,8 @@ def interpret(function,inputs,*,args=ARGUMENTS):
     if not returned:reject("MISSING_RETURN")
     return value
 
-def evaluate(code,*,function_name="retry_delay_ms",args=ARGUMENTS,cases=CASES):
-    f=parse_subset(code,function_name=function_name,args=args)
+def evaluate(code,*,function_name="retry_delay_ms",args=ARGUMENTS,cases=CASES,max_ast_nodes=120,max_local_names=4):
+    f=parse_subset(code,function_name=function_name,args=args,max_ast_nodes=max_ast_nodes,max_local_names=max_local_names)
     results=[]
     for input_values,expected in cases:
         try:

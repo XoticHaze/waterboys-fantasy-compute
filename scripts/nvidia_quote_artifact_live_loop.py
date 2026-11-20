@@ -50,7 +50,7 @@ def reference(inp):
 def score(source):
     cases=tuple((args,reference(args)) for args in CASES)
     try:
-        data=evaluate(source,function_name="quote_price_cents",args=ARGS,cases=cases)
+        data=evaluate(source,function_name="quote_price_cents",args=ARGS,cases=cases, max_ast_nodes=160, max_local_names=5)
     except (CodeRejected,ArithmeticError,TypeError,ValueError,OverflowError):
         return {"passed":0,"total":len(cases),
                 "failed_case_indices":list(range(len(cases))),

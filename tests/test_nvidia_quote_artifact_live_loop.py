@@ -1,4 +1,4 @@
-import sys, unittest
+import sys, unittest, hashlib, ast
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"scripts"))
 from nvidia_quote_artifact_live_loop import (
@@ -55,6 +55,20 @@ class QuoteArtifactTests(unittest.TestCase):
    validate_step({"error":"upstream_quote_step_selector_rejected"},0)
   with self.assertRaisesRegex(RuntimeError,"QUOTE_CALLER_UNCLASSIFIED"):
    validate_step({"error":"Bearer SECRET"},0)
+ def test_live_model_source_preserved_exactly_and_replayed_without_exec(self):
+  path=Path(__file__).resolve().parents[1]/"experiments/nvidia-agent-artifact-v1/quote_replay_44717066467.py"
+  source=path.read_text(encoding="utf-8")
+  self.assertEqual(len(source.encode()),667)
+  self.assertEqual(hashlib.sha256(source.encode()).hexdigest(),"adfe132d573afb094bc45c885b63a47589c84a1205a5ca99801f12a28e5da9f0")
+  self.assertEqual(len(list(ast.walk(ast.parse(source).body[0]))),147)
+  self.assertEqual(score(source)["passed"],len(CASES))
+  self.assertTrue(score(source)["source_ast_admitted"])
+ def test_legacy_ast_limits_remain_unchanged(self):
+  path=Path(__file__).resolve().parents[1]/"experiments/nvidia-agent-artifact-v1/quote_replay_44717066467.py"
+  source=path.read_text()
+  from nvidia_fixed_code_repair_work import parse_subset,CodeRejected
+  with self.assertRaises(CodeRejected):parse_subset(source,function_name="quote_price_cents",args=ARGS)
+  self.assertEqual(len(CASES),60)
  def test_origin_task_stays_public_synthetic(self):
   self.assertEqual(ARGS,("minutes","hourly_cents","travel_cents","supplies_cents","overhead_bps","margin_bps"))
 if __name__=="__main__":unittest.main()
