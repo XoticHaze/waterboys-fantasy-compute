@@ -15,3 +15,10 @@ accepted_release_workflow_pr=XoticHaze/waterboys-fantasy-compute#62
 operator_go_ahead=run_live_synthetic_feedback_loops_and_correct
 release_request_created_utc=2026-11-20T09:29:43.783Z
 Rationale: One pre-reviewed private-bound source update is a prerequisite to model feedback experiments. Existing cloud identity, secret reference, disabled flag, and private-only routes must remain preserved. No model execution during release.
+
+verified_repair_pr=XoticHaze/waterboys-fantasy-compute#63
+previous_attempt_run=44711194177
+previous_attempt_status=source_contract_path_mismatch_predeployment
+previous_attempt_cloudflare_mutation=false
+corrected_release_workflow_merge_sha=47fd79c56b99b10d25c4801ce8745cf7411edb11
+release_retry_request_created_utc=2026-11-20T09:32:32.546Z
