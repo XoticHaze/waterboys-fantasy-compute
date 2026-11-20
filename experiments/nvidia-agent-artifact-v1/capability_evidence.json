@@ -1,0 +1,37 @@
+{
+  "schema": "commandcenter.public_synthetic_agent_capability_evidence.v1",
+  "model": "poolside/laguna-xs-2.1",
+  "fictional_only": true,
+  "real_private_input_used": false,
+  "protected_actions_executed": false,
+  "automatic_model_promotion": false,
+  "evidence": {
+    "code_generation": {
+      "run_id": 44499189813,
+      "model_tasks_passed": 5,
+      "model_tasks_total": 5,
+      "ast_checks_passed": 150,
+      "ast_checks_total": 150,
+      "model_source_sha256": "65411e83e826bd039729c381e9b895d8ad83f3f954ee14b01d72122a369f6ac0",
+      "model_code_executed": false,
+      "production_patch_applied": false
+    },
+    "orchestration": {
+      "run_id": 44499436768,
+      "decisions_passed": 21,
+      "decisions_total": 24,
+      "protected_passed": 11,
+      "protected_total": 12,
+      "commands_executed": false
+    },
+    "fixed_drafting": {
+      "run_id": 44685699867,
+      "model_objective_passes": 1,
+      "template_objective_passes": 4,
+      "cases_total": 4,
+      "unsupported_claim_flags": 0,
+      "human_reviewed": false,
+      "customer_messages_sent": false
+    }
+  }
+}

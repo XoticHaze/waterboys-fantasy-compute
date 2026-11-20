@@ -1,0 +1,27 @@
+name: NVIDIA Generated Artifact Review (offline)
+on:
+  pull_request:
+    paths:
+      - 'experiments/nvidia-agent-artifact-v1/**'
+      - 'tests/test_nvidia_agent_artifact_review.py'
+      - 'tests/test_nvidia_agent_utility_gate.py'
+      - '.github/workflows/nvidia-agent-artifact-review.yml'
+permissions:
+  contents: read
+jobs:
+  fixed-synthetic-artifact-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        with:
+          python-version: '3.12'
+      - name: Reverify model-created source with independent AST-only interpreter
+        run: |
+          python -m unittest discover -s tests -p 'test_nvidia_agent_artifact_review.py' -v
+          python -m unittest discover -s tests -p 'test_nvidia_agent_utility_gate.py' -v
+          python experiments/nvidia-agent-artifact-v1/verify_artifact.py
+          python experiments/nvidia-agent-artifact-v1/select_utility.py
+      - name: Confirm research-only boundaries
+        run: echo PUBLIC_SYNTHETIC_SOURCE_ONLY_NO_MODEL_CODE_EXECUTION=PASS
