@@ -15,6 +15,8 @@ from urllib.request import Request, urlopen
 from nvidia_fixed_code_repair_work import evaluate, CodeRejected
 
 URL = 'http://127.0.0.1:8787/evidence-status-step'
+URL_V2 = 'http://127.0.0.1:8787/evidence-status-step-v2'
+SCHEMA_V2 = 'commandcenter.public_synthetic_evidence_status_step.v2'
 SCHEMA = 'commandcenter.public_synthetic_evidence_status_step.v1'
 MODEL = 'poolside/laguna-xs-2.1'
 ARGS = ('receipt', 'verified', 'queue', 'age_s', 'ttl_s', 'protected')
@@ -88,29 +90,32 @@ def classify(first,revised):
             'regressions_count':len(set(b['failed_case_indices'])-set(a['failed_case_indices'])) if semantic_pair else 0,
             'same_source':revised==first if revised is not None else None}
 
-def validate_reply(doc,stage):
+def validate_reply(doc,stage, *, feedback_v2=False):
     if not isinstance(doc,dict) or any(doc.get(k)!=v for k,v in {
-        'schema':SCHEMA,'stage':stage,'model':MODEL,'provider_calls':1,
+        'schema':SCHEMA_V2 if feedback_v2 else SCHEMA,'stage':stage,'model':MODEL,'provider_calls':1,
         'private_input_used':False,'model_code_executed':False,
         'commands_executed':False,'production_admitted':False}.items()):
         raise ValueError('UNTRUSTED_EVIDENCE_STATUS_RECEIPT')
     if doc.get('status')!='candidate_unexecuted' or doc.get('http_status')!=200:
         raise RuntimeError('PROVIDER_CANDIDATE_UNAVAILABLE')
+    if feedback_v2 and (doc.get('source_hash_verified') is not True or
+                        doc.get('stage') != 1):
+        raise ValueError('V2_UNVERIFIED_SOURCE_OR_STAGE')
     source=doc.get('source')
     if not isinstance(source,str) or not source.startswith('def evidence_state('+', '.join(ARGS)+'):\n') or not 75<=len(source)<=1051:
         raise ValueError('EVIDENCE_STATUS_SOURCE_SHAPE_REJECTED')
     return source
 
-def call(payload):
+def call(payload, *, feedback_v2=False):
     raw=json.dumps(payload,separators=(',',':')).encode('utf-8')
-    req=Request(URL,data=raw,headers={'Content-Type':'application/json','Content-Length':str(len(raw))},method='POST')
+    req=Request(URL_V2 if feedback_v2 else URL,data=raw,headers={'Content-Type':'application/json','Content-Length':str(len(raw))},method='POST')
     try:
         with urlopen(req,timeout=110) as resp:answer=resp.read(12000)
     except HTTPError as err:answer=err.read(12000)
     except (OSError,URLError,TimeoutError) as err:raise RuntimeError('PRIVATE_BOUND_PROVIDER_UNAVAILABLE') from err
     try:out=json.loads(answer)
     except ValueError as err:raise RuntimeError('INVALID_BOUND_REPLY') from err
-    return validate_reply(out,payload['stage'])
+    return validate_reply(out,payload['stage'],feedback_v2=feedback_v2)
 
 def persist(first,revised,result):
     root=Path('artifacts/nvidia-evidence-status')
@@ -120,6 +125,7 @@ def persist(first,revised,result):
     record={'schema':'commandcenter.public_synthetic_evidence_status_review.v1',
         'task':'fictional_readonly_ui_evidence_state', 'model':MODEL,'provider_requests':1+(revised is not None),
         'workflow_run_id':os.environ.get('GITHUB_RUN_ID'), 'controller_sha':os.environ.get('GITHUB_SHA'),
+        'feedback_protocol':os.environ.get('NVIDIA_EVIDENCE_FEEDBACK_PROTOCOL','v1'),
         'source_sha_baseline':hashlib.sha256(first.encode()).hexdigest(),
         'source_sha_revised':hashlib.sha256(revised.encode()).hexdigest() if revised is not None else None,
         'fictional_only':True,'private_input_used':False,'model_code_executed':False,
@@ -131,7 +137,18 @@ def main():
     first=call({'stage':0})
     a=score(first)
     print('EVIDENCE_STATUS_BASELINE='+str(a['passed'])+'/'+str(a['total']),flush=True)
-    second=call({'stage':1,'source':first,'failed_examples':feedback(a)}) if a['source_ast_admitted'] and a['passed']!=a['total'] else None
+    if a['source_ast_admitted'] and a['passed']!=a['total']:
+        protocol=os.environ.get('NVIDIA_EVIDENCE_FEEDBACK_PROTOCOL','v1')
+        if protocol=='v2':
+            # Sealed, deterministic evidence; 74 holdout pairs stay provider-hidden.
+            from nvidia_agent_feedback_capsule import provider_feedback_v2
+            second=call(provider_feedback_v2(first),feedback_v2=True)
+        elif protocol=='v1':
+            second=call({'stage':1,'source':first,'failed_examples':feedback(a)})
+        else:
+            raise ValueError('UNADMITTED_FEEDBACK_PROTOCOL')
+    else:
+        second=None
     result=persist(first,second,classify(first,second))
     print('EVIDENCE_STATUS_REVIEW='+json.dumps({'outcome':result['outcome'],
         'newly_correct_count':result['newly_correct_count'],

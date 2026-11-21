@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from nvidia_fixed_code_repair_work import parse_subset, interpret, CodeRejected
-from nvidia_evidence_status_artifact_live_loop import ARGS, CASES, reference, score
+from nvidia_evidence_status_artifact_live_loop import ARGS, CASES, SEED, reference, score
 
 SCHEMA = "commandcenter.public_synthetic_agent_feedback_capsule.v1"
 LABELS = {
@@ -85,9 +85,50 @@ def translate(source: str, *, attempt: int = 1) -> dict:
         (good if correct else bad).append(row)
     if len(good)!=evidence["passed"] or len(bad)!=len(evidence["failed_case_indices"]):
         raise AssertionError("INDEPENDENT_SCORE_RECONCILIATION_FAILED")
+    # The 74 holdouts remain independent: never expose their input/output pairs
+    # in a provider correction request, even after one trial is scored.
+    diagnostic_bad=[x for x in bad if x["case_index"] < len(SEED)]
+    diagnostic_good=[x for x in good if x["case_index"] < len(SEED)]
     return {**base,"next_step":"FIRST_DRAFT_ACCEPTED_NO_CORRECTION" if not bad else "REVISE_WITH_GROUNDED_COUNTEREXAMPLES",
-            "failing_examples":_index(bad,3),
-            "preserve_examples":_index(good,3)}
+            "diagnostic_cases_total":len(SEED), "held_out_cases_total":len(CASES)-len(SEED),
+            "holdout_case_details_disclosed":False,
+            "failing_examples":_index(diagnostic_bad,3),
+            "preserve_examples":_index(diagnostic_good,3)}
+
+# Only fixed, reviewable strategy IDs may cross the versioned inference boundary.
+STRATEGIES = frozenset({
+    "queue_first", "receipt_first", "freshness_first", "protected_first",
+    "invalid_inputs_first", "single_return", "unknown"
+})
+
+def provider_feedback_v2(source: str, *, attempt: int = 1,
+                         rejected_strategy_ids: tuple[str, ...] = ()) -> dict:
+    """Project verified diagnostic cases into a narrow, versioned Worker input.
+
+    This is a sealed public-synthetic DTO, not a provider call. A Worker must
+    verify its source SHA and re-check the fixed case inputs/oracle before use.
+    """
+    cap = translate(source, attempt=attempt)
+    if not cap["ast_admitted"] or not cap["failing_examples"]:
+        raise ValueError("NO_VERIFIED_DIAGNOSTIC_FAILURE_TO_REVISE")
+    if not isinstance(rejected_strategy_ids, tuple) or len(rejected_strategy_ids) > attempt-1 or (
+        len(set(rejected_strategy_ids)) != len(rejected_strategy_ids)
+    ) or any(type(x) is not str or x not in STRATEGIES for x in rejected_strategy_ids):
+        raise ValueError("INVALID_REJECTED_STRATEGY_MEMORY")
+    def project(rows):
+        return [{k:x[k] for k in ("input","expected","actual","category","interpreter_rejected")}
+                for x in rows]
+    return {
+        "stage":1,
+        "source":source,
+        "feedback":{
+            "schema":SCHEMA, "scope":SCOPE, "attempt":attempt,
+            "source_sha256":cap["source_sha256"],
+            "failing_examples":project(cap["failing_examples"]),
+            "preserve_examples":project(cap["preserve_examples"]),
+            "rejected_strategy_ids":list(rejected_strategy_ids),
+        }
+    }
 
 if __name__=="__main__":
     import argparse
