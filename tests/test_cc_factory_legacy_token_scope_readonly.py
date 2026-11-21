@@ -97,6 +97,34 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertFalse(receipt["configured"])
         self.assertEqual(receipt["existing_broker_settings_http"],"NOT_ATTEMPTED")
         self.assertFalse(receipt["factory_write_denial_proven"])
+    def test_public_report_omits_private_metadata_and_pins_run(self):
+        receipt={
+            "settings_http":200,
+            "existing_factory_immutable_id":{"id_verified":True,"factory_worker_id":"a"*32},
+            "protected_access_application_readback":{"existing_app_confirmed":True,
+                 "aud":"secret-owner-aud"},
+            "activation_flags":{"FACTORY_EXECUTOR_ENABLED":"0",
+              "FACTORY_CREATE_ENABLED":"0","FACTORY_SCOPED_TOKEN_ENABLED":"0"},
+            "existing_legacy_token_scope_metadata":{"token_identity_class":"USER_TOKEN",
+              "self_verify_http":200,"self_detail_http":403,
+              "policy_shape":"UNAVAILABLE", "token":"secret-value",
+              "creator_email":"sensitive@example.com","factory_write_denial_live_proven":False},
+            "existing_scoped_deploy_comparison":{"configured":True,
+              "existing_broker_settings_http":200,
+              "protected_factory_settings_http":403,"token":"scope-secret"}
+        }
+        r=module.public_audit_report(receipt,"44900012345","f"*40)
+        self.assertEqual(r["schema"],"commandcenter.cloudflare.factory_scope_audit_receipt.v1")
+        self.assertEqual(r["github_run_id"],"44900012345")
+        self.assertEqual(r["factory_execution_flags"]["FACTORY_EXECUTOR_ENABLED"],"0")
+        self.assertFalse(r["write_denial_proven"])
+        self.assertEqual(r["cloudflare_mutations"],0)
+        clean=json.dumps(r)
+        for private in ["secret-value","sensitive@example.com","secret-owner-aud",
+                        "scope-secret","a"*32]:
+            self.assertNotIn(private,clean)
+        with self.assertRaises(ValueError):
+            module.public_audit_report(receipt,"not-numeric","f"*40)
     def test_no_scope_visibility_never_proves_denial(self):
         opener=MockOpener({USER_VERIFY:403,ACCOUNT_VERIFY:403})
         with patch.object(module.urllib.request,"build_opener",return_value=opener):
