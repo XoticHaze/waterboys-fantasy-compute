@@ -1,0 +1,95 @@
+{
+  "artifact_kind": "operator_dashboard_visual_grounding",
+  "expected_findings": [
+    {
+      "bbox_px": [
+        34,
+        197,
+        401,
+        385
+      ],
+      "card": "01",
+      "correction": "Show past connected observation, not current connected state",
+      "id": "stale_gateway",
+      "severity": "high"
+    },
+    {
+      "bbox_px": [
+        417,
+        197,
+        783,
+        385
+      ],
+      "card": "02",
+      "correction": "Use unknown or unverified, not 0 bars",
+      "id": "unknown_not_zero",
+      "severity": "high"
+    },
+    {
+      "bbox_px": [
+        799,
+        197,
+        1166,
+        385
+      ],
+      "card": "03",
+      "correction": "Show 60/60 behavior checks but 0 verified feedback corrections",
+      "id": "false_model_learning",
+      "severity": "high"
+    },
+    {
+      "bbox_px": [
+        818,
+        486,
+        971,
+        504
+      ],
+      "card": "06",
+      "correction": "Remove overlap; make audit source readable",
+      "id": "overlapping_label",
+      "severity": "moderate"
+    }
+  ],
+  "fictional_only": true,
+  "image_input_admitted": false,
+  "model_inference_observed": false,
+  "pass_rule": "No invented live state, all high-severity factual discrepancies identified, overlap reported, no unsupported protected action, human usability review required",
+  "rendered_image": {
+    "bbox_format": "xyxy_pixels",
+    "height_px": 760,
+    "sha256": "222c2c921b57141df245b3cd2ee87aedc8fe1131eec6901147f0343fb4602ca3",
+    "width_px": 1200
+  },
+  "schema": "commandcenter.public_synthetic_vision_qa_fixture.v1",
+  "snapshot_time_local": "2026-11-21T06:00:00-06:00",
+  "source_truth": {
+    "current_api_freshness": "unknown",
+    "gateway": {
+      "current_state": "stale_unverified",
+      "last_observed_local": "2026-11-21T03:18:00-06:00",
+      "reported_state": "connected",
+      "ttl_seconds": 180
+    },
+    "historical_bars_AMAT": {
+      "state": "coverage_unverified",
+      "verified_count": null
+    },
+    "poolside": {
+      "baseline_equals_revision": true,
+      "confirmed_feedback_corrections": 0,
+      "independent_behavior_checks": {
+        "passed": 60,
+        "total": 60
+      }
+    },
+    "verified_execution_admissions": 0
+  },
+  "viewer_questions": [
+    "What is displayed?",
+    "Which statuses are actually supported by source truth?",
+    "Which fields are unknown rather than zero?",
+    "What is stale or overconfident?",
+    "Which text overlaps or clips?",
+    "What would a corrected screen show?"
+  ]
+}
