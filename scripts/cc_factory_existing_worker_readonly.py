@@ -258,7 +258,7 @@ def factory_worker_id_readback(token: str) -> dict:
 def fixed_factory_deployment_identity(latest: dict) -> dict:
     """Sanitized UUID readback from an existing immutable deployment, never source approval."""
     import re
-    uuid = re.compile(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\Z")
+    uuid = re.compile(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\Z")
     result={"deployment_id":None, "full_traffic_version_id":None,
             "unique_full_traffic_version":False,
             "source_content_attested":False}
