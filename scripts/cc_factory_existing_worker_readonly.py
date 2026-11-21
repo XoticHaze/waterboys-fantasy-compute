@@ -84,6 +84,13 @@ def main() -> int:
         "latest_deployment_present": bool(latest),
         "latest_deployment_created_on": (latest.get("created_on")
             if isinstance(latest.get("created_on"), str) else None),
+        "operator_access_audience_binding_present": "FACTORY_ACCESS_AUD" in by_name,
+        "operator_owner_allowlist_binding_present": "FACTORY_ALLOWED_EMAILS" in by_name,
+        "owner_ui_bindings_initialized": ("FACTORY_ACCESS_AUD" in by_name and
+                                          "FACTORY_ALLOWED_EMAILS" in by_name),
+        "cloudflare_worker_mutations_enabled": any(
+            flags[k] == "1" for k in FLAGS
+        ),
         "credential_values_exported": False,
         "runtime_source_attested": False,
         "neutral_account_mutation_authority": False,
