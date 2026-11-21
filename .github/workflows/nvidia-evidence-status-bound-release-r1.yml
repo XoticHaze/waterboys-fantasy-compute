@@ -49,7 +49,7 @@ jobs:
               fields[k]=v
           expected={
            "reviewed_public_source_sha":"bccfa9ef96709942c31f2ed5c1ec39aeccfa1669",
-           "reviewed_public_source_ci_run":"44716485070",
+           "reviewed_public_source_ci_run":"44903872423",
            "approval_scope":"existing_private_synthetic_evidence_status_revision_only",
            "existing_worker":"cc-shared-nvidia-inference",
            "preserve_bound_NVIDIA_API_KEY_secrets_store_reference":"true",
