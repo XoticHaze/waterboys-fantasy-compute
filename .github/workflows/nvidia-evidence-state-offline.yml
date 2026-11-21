@@ -1,0 +1,29 @@
+name: Agent Fabric Evidence-State Correction Offline Contract
+# Public fictional offline tests only. No provider calls, credentials, or protected actions.
+on:
+  pull_request:
+    paths:
+      - scripts/nvidia_evidence_status_artifact_live_loop.py
+      - tests/test_nvidia_evidence_status_artifact.py
+      - .github/workflows/nvidia-evidence-state-offline.yml
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Reserved offline-only verification"
+        required: true
+        type: choice
+        options: ["true"]
+permissions:
+  contents: read
+jobs:
+  deterministic-oracle-and-artifact-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Compile owner-authored source, then independently test fixed oracle
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nvidia_evidence_status_artifact_live_loop.py
+          python3 -m unittest discover -s tests -p 'test_nvidia_evidence_status_artifact.py' -v
+          echo EVIDENCE_STATE_PUBLIC_SYNTHETIC_OFFLINE_CONTRACT=PASS
