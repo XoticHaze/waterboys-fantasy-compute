@@ -1,0 +1,20 @@
+name: Agent Fabric Public Fictional Visual QA Fixture Contract
+on:
+  pull_request:
+    paths:
+      - experiments/agent-fabric-visual-qa/v1/**
+      - tests/test_agent_fabric_vision_fixture.py
+      - .github/workflows/agent-fabric-visual-fixture-offline.yml
+permissions:
+  contents: read
+jobs:
+  source-truth-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify fictional visual source and frozen expected findings
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_agent_fabric_vision_fixture.py' -v
+          echo AGENT_FABRIC_VISUAL_FIXTURE_OFFLINE=PASS
