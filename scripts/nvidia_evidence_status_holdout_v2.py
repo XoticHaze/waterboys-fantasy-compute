@@ -49,7 +49,7 @@ def compare_holdout_v2(first: str,revised: str|None)->dict:
     elif not second['ast_admitted']:result="REVISION_STRUCTURE_REJECTED"
     elif first==revised:result="IDENTICAL_SOURCE_NOT_SELF_CORRECTION"
     elif new-old:result="REGRESSED_REJECTED"
-    elif old-new:result="HOLDO UT_V2_IMPROVED_NO_REGRESSION".replace(' ','')
+    elif old-new:result="HOLDOUT_V2_IMPROVED_NO_REGRESSION"
     else:result="NO_MEASURED_GAIN"
     return dict(profile=PROFILE,fixture_sha256=FIXTURE_SHA256,
                 baseline=baseline,revised=second,outcome=result,
