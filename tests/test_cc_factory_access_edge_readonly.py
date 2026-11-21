@@ -41,5 +41,32 @@ class AnonymousFactoryEdgeTests(unittest.TestCase):
         self.assertFalse(z["unauthenticated_request_not_served"])
         self.assertFalse(z["cloudflare_access_redirect_observed"])
 
+class ExistingAccessAppMetadataTests(unittest.TestCase):
+    def test_exact_access_app_readback_redacts_audience_and_identity(self):
+        import json
+        from unittest.mock import patch
+        spec2=importlib.util.spec_from_file_location(
+            "cc_factory_existing_worker_readonly",
+            SCRIPT.with_name("test_cc_factory_access_edge_readonly.py").parents[1] /
+            "scripts/cc_factory_existing_worker_readonly.py")
+        module=importlib.util.module_from_spec(spec2)
+        spec2.loader.exec_module(module)
+        class FakeHttp:
+            status=200
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self,cap): return json.dumps({"success":True,"result":[{
+                "name":"CC Shared Worker Factory","aud":"never-echo-this-aud",
+                "destinations":[{"type":"worker","name":"shared-compute-worker-factory"}],
+                "policies":[{"include":[{"email":{"email":"private-owner@example.com"}}]}]
+            }]}).encode("utf-8")
+        with patch.object(module.urllib.request,"urlopen",return_value=FakeHttp()):
+            result=module.access_app_status("fixed-placeholder-token")
+        self.assertTrue(result["existing_app_confirmed"])
+        self.assertTrue(result["aud_present"])
+        self.assertTrue(result["worker_destination_found"])
+        self.assertNotIn("never-echo-this-aud",str(result))
+        self.assertNotIn("private-owner@example.com",str(result))
+
 if __name__=="__main__":
     unittest.main()

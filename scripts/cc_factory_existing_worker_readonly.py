@@ -41,6 +41,41 @@ def read(token: str, suffix: str) -> tuple[int, dict]:
         return status, {}
     return status, data if isinstance(data, dict) else {}
 
+def access_app_status(token: str) -> dict:
+    """GET only. Never print AUD, owner email, session, policy subjects."""
+    url = API + f"/accounts/{ACCOUNT}/access/apps?name=CC%20Shared%20Worker%20Factory&exact=true&per_page=10"
+    req = urllib.request.Request(
+        url, method="GET",
+        headers={"Authorization": "Bearer " + token,
+                 "Accept": "application/json",
+                 "User-Agent": "cc-factory-access-app-readonly-v1"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=16) as response:
+            status = response.status
+            data = json.loads(response.read(120000))
+    except urllib.error.HTTPError as exc:
+        return {"read_http": exc.code, "existing_app_confirmed": False,
+                "aud_present": False, "worker_destination_found": False}
+    except (ValueError, UnicodeDecodeError, urllib.error.URLError, TimeoutError):
+        return {"read_http": "NOT_VERIFIED", "existing_app_confirmed": False,
+                "aud_present": False, "worker_destination_found": False}
+    if status != 200 or not isinstance(data, dict) or data.get("success") is not True:
+        return {"read_http": status, "existing_app_confirmed": False,
+                "aud_present": False, "worker_destination_found": False}
+    result = data.get("result") or []
+    if not isinstance(result, list):
+        result = []
+    exact = [r for r in result if isinstance(r, dict)
+             and r.get("name") == "CC Shared Worker Factory"]
+    app = exact[0] if len(exact) == 1 else {}
+    # Worker target matcher is supportive evidence, not an exact policy attestation.
+    target = "shared-compute-worker-factory" in json.dumps(app, ensure_ascii=True)
+    return {"read_http": status, "existing_app_confirmed": len(exact) == 1,
+            "aud_present": bool(app.get("aud")), "worker_destination_found": target,
+            "account_id_output": False, "aud_or_identity_exported": False}
+
+
 def main() -> int:
     if os.getenv("CLOUDFLARE_ACCOUNT_ID") != ACCOUNT:
         raise SystemExit("FACTORY_AUDIT_WRONG_ACCOUNT")
@@ -81,6 +116,7 @@ def main() -> int:
         "activation_flags": flags,
         "privileged_binding_presence": privileged,
         "ledger_binding_present": "FACTORY_LEDGER" in by_name,
+        "protected_access_application_readback": access_app_status(token),
         "latest_deployment_present": bool(latest),
         "latest_deployment_created_on": (latest.get("created_on")
             if isinstance(latest.get("created_on"), str) else None),
