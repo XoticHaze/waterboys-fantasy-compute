@@ -74,6 +74,29 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(receipt["policy_shape"],"UNAVAILABLE")
         self.assertFalse(receipt["factory_write_denial_live_proven"])
         self.assertNotIn(token_id,json.dumps(receipt))
+    def test_scoped_r2_reaches_broker_but_factory_get_denied_without_write_proof(self):
+        root="/accounts/"+module.ACCOUNT+"/workers/scripts/"
+        opener=MockOpener({
+            root+"waterboys-fantasy-broker/settings":
+                {"success":True,"result":{"bindings":[{"name":"PRIVATE_SECRET","text":"x"}]}},
+            root+"shared-compute-worker-factory/settings":403,
+        })
+        with patch.object(module.urllib.request,"build_opener",return_value=opener):
+            receipt=module.scoped_existing_deploy_candidate_readback("r2-secret-private")
+        self.assertEqual(receipt["existing_broker_settings_http"],200)
+        self.assertEqual(receipt["protected_factory_settings_http"],403)
+        self.assertTrue(receipt["configured"])
+        self.assertFalse(receipt["factory_write_denial_proven"])
+        self.assertFalse(receipt["scoped_deploy_write_admission_proven"])
+        self.assertEqual(len(opener.calls),2)
+        self.assertTrue(all(method=="GET" for method,url in opener.calls))
+        self.assertNotIn("r2-secret-private",json.dumps(receipt))
+        self.assertNotIn("PRIVATE_SECRET",json.dumps(receipt))
+    def test_missing_scoped_r2_does_not_promote_legacy(self):
+        receipt=module.scoped_existing_deploy_candidate_readback("")
+        self.assertFalse(receipt["configured"])
+        self.assertEqual(receipt["existing_broker_settings_http"],"NOT_ATTEMPTED")
+        self.assertFalse(receipt["factory_write_denial_proven"])
     def test_no_scope_visibility_never_proves_denial(self):
         opener=MockOpener({USER_VERIFY:403,ACCOUNT_VERIFY:403})
         with patch.object(module.urllib.request,"build_opener",return_value=opener):
