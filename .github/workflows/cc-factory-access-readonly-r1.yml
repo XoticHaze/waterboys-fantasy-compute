@@ -1,0 +1,40 @@
+name: CC Factory Access Anonymous Readback and Existing Bindings
+# Public GitHub compute, fixed GET-only Cloudflare public status and existing
+# bounded Worker settings under preexisting deploy credential. Never mutates.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cc-factory-access-readonly-r1.yml'
+      - 'scripts/cc_factory_access_edge_readonly.py'
+      - 'tests/test_cc_factory_access_edge_readonly.py'
+      - 'scripts/cc_factory_existing_worker_readonly.py'
+
+permissions:
+  contents: read
+
+jobs:
+  edge-and-identity-bindings:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Pure policy classifiers, no network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_cc_factory_access_edge_readonly.py' -v
+          python -m py_compile scripts/cc_factory_existing_worker_readonly.py
+      - name: Anonymous fixed production endpoint denies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cc_factory_access_edge_readonly.py
+      - name: Existing Cloudflare Workers setting and owner binding presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cc_factory_existing_worker_readonly.py
