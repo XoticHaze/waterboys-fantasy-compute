@@ -2,6 +2,7 @@ name: CC Factory Access Anonymous Readback and Existing Bindings
 # Public GitHub compute, fixed GET-only Cloudflare public status and existing
 # bounded Worker settings under preexisting deploy credential. Never mutates.
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -10,6 +11,8 @@ on:
       - 'tests/test_cc_factory_access_edge_readonly.py'
       - 'scripts/cc_factory_existing_worker_readonly.py'
       - 'tests/test_cc_factory_legacy_token_scope_readonly.py'
+      - 'scripts/cloudflare_r2_scope_preflight.py'
+      - 'tests/test_cloudflare_r2_scope_preflight.py'
 
 concurrency:
   group: cc-factory-readonly-and-public-receipt
@@ -35,6 +38,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_cc_factory_access_edge_readonly.py' -v
           python -m unittest discover -s tests -p 'test_cc_factory_legacy_token_scope_readonly.py' -v
           python -m py_compile scripts/cc_factory_existing_worker_readonly.py
+          python -m unittest discover -s tests -p 'test_cloudflare_r2_scope_preflight.py' -v
+          python -m py_compile scripts/cloudflare_r2_scope_preflight.py
       - name: Anonymous fixed production endpoint denies
         shell: bash
         run: |
