@@ -11,6 +11,10 @@ on:
       - 'scripts/cc_factory_existing_worker_readonly.py'
       - 'tests/test_cc_factory_legacy_token_scope_readonly.py'
 
+concurrency:
+  group: cc-factory-readonly-and-public-receipt
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -21,6 +25,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_DEPLOY_TOKEN_R2: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN_R2 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Pure policy classifiers, no network
@@ -42,3 +47,98 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/cc_factory_existing_worker_readonly.py
+      - name: Export scrubbed read-only evidence, no API token values
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cc-factory-sanitized-readback
+          path: cc-factory-readback.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-sanitized-receipt:
+    needs: edge-and-identity-bindings
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    # This job is credential-free: it has NO CLOUDFLARE_* secret env bindings.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Retrieve exact scrubbed source result only
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cc-factory-sanitized-readback
+          path: ${{ runner.temp }}/cc-factory-sanitized
+      - name: Validate and commit nonsecret run-specific + current receipts
+        shell: bash
+        env:
+          CC_READBACK_SOURCE: ${{ runner.temp }}/cc-factory-sanitized/cc-factory-readback.json
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          doc=json.loads(Path(os.environ['CC_READBACK_SOURCE']).read_text(encoding='utf-8'))
+          keys={'schema','github_run_id','github_head_sha','observed_at_utc',
+                'source_role','factory_settings_http','factory_id_verified',
+                'access_app_present','factory_execution_flags','legacy_token',
+                'scoped_r2_token','cloudflare_mutations','credential_values_exported',
+                'write_denial_proven','release_or_admin_admitted','classification'}
+          if set(doc)!=keys: raise SystemExit('READBACK_UNEXPECTED_FIELD_DENIED')
+          if doc['schema']!='commandcenter.cloudflare.factory_scope_audit_receipt.v1':
+              raise SystemExit('READBACK_SCHEMA_DENIED')
+          rid=str(doc['github_run_id'])
+          if not re.fullmatch('[0-9]{5,20}',rid) or rid!=os.environ['GITHUB_RUN_ID']:
+              raise SystemExit('READBACK_RUN_ID_DENIED')
+          sha=str(doc['github_head_sha'])
+          if not re.fullmatch('[a-f0-9]{40}',sha) or sha!=os.environ['GITHUB_SHA']:
+              raise SystemExit('READBACK_SOURCE_SHA_DENIED')
+          if doc['cloudflare_mutations']!=0 or doc['credential_values_exported'] is not False:
+              raise SystemExit('READBACK_MUTATION_OR_CREDENTIAL_FLAG_DENIED')
+          if doc['write_denial_proven'] is not False or doc['release_or_admin_admitted'] is not False:
+              raise SystemExit('READBACK_FALSE_ADMISSION')
+          if doc['classification']!='GET_ONLY_SCOPE_EVIDENCE_NOT_WRITE_DENIAL_PROOF':
+              raise SystemExit('READBACK_CLASSIFICATION_DENIED')
+          flags=doc['factory_execution_flags']
+          if set(flags)!={'FACTORY_EXECUTOR_ENABLED','FACTORY_CREATE_ENABLED',
+                          'FACTORY_SCOPED_TOKEN_ENABLED'} or not all(
+                          x in ('0','1','UNVERIFIED') for x in flags.values()):
+              raise SystemExit('READBACK_FLAGS_UNEXPECTED')
+          legacy=doc['legacy_token']
+          if set(legacy)!={'token_identity_class','self_verify_http','self_detail_http',
+              'policy_shape','policy_entry_count','allows_present','denies_present'}:
+              raise SystemExit('READBACK_LEGACY_POLICY_SCHEMA_DENIED')
+          scoped=doc['scoped_r2_token']
+          if set(scoped)!={'configured','existing_broker_settings_http',
+              'protected_factory_settings_http'}:
+              raise SystemExit('READBACK_SCOPED_POLICY_SCHEMA_DENIED')
+          if not isinstance(scoped['configured'],bool):
+              raise SystemExit('READBACK_TOKEN_CONFIG_TYPE_DENIED')
+          if any(len(str(x))>110 for x in
+                 list(legacy.values())+list(scoped.values())):
+              raise SystemExit('READBACK_UNBOUNDED_POLICY_FIELD_DENIED')
+          if doc['source_role']!='EXISTING_WATERBOYS_PUBLIC_READONLY_WORKFLOW':
+              raise SystemExit('READBACK_PROVENANCE_DENIED')
+          if not isinstance(doc['observed_at_utc'],str) or not re.fullmatch(
+              r'[0-9T:.-]{19,40}\+00:00',doc['observed_at_utc']):
+              raise SystemExit('READBACK_TIMESTAMP_DENIED')
+          directory=Path('rendezvous/receipts')
+          directory.mkdir(parents=True,exist_ok=True)
+          fresh=directory/('cc-factory-scope-readback-'+rid+'.json')
+          if fresh.exists():
+              raise SystemExit('READBACK_RUN_RECEIPT_REPLAY_DENIED')
+          data=json.dumps(doc,indent=2,sort_keys=True)+'\n'
+          fresh.write_text(data,encoding='utf-8')
+          (directory/'cc-factory-scope-readback-current.json').write_text(
+              data,encoding='utf-8')
+          print('CC_FACTORY_SANITIZED_LIVE_AUDIT_RECEIPT_READY=1')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add rendezvous/receipts/cc-factory-scope-readback-*.json
+          git diff --cached --quiet && {
+            echo "READBACK_NEW_IMMUTABLE_RECEIPT_MISSING"; exit 1;
+          }
+          git commit -m 'audit: persist scoped Cloudflare factory credential readback'
+          git push origin HEAD:main
+
