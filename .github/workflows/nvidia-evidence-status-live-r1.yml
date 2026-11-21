@@ -165,7 +165,8 @@ jobs:
               a["commands_executed"] or a["production_admitted"] or
               a["provider_requests"] not in (1,2) or a["baseline"]["total"]!=100 or
               a["outcome"] not in ("FIRST_DRAFT_PASSED_NO_CORRECTION","CORRECTED_ALL_HOLDOUTS",
-                                   "PARTIAL_IMPROVEMENT","NO_GAIN","REGRESSED_REJECTED","REVISION_UNAVAILABLE")):
+                                   "PARTIAL_IMPROVEMENT","NO_GAIN","REGRESSED_REJECTED","REVISION_UNAVAILABLE",
+                                   "BASELINE_STRUCTURE_REJECTED","REVISION_STRUCTURE_REJECTED")):
               raise SystemExit("NVIDIA_EVIDENCE_STATUS_UNTRUSTED")
           print("NVIDIA_EVIDENCE_STATUS_CAPTURED="+a["outcome"])
           PY
