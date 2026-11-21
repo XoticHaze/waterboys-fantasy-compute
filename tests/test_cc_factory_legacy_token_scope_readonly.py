@@ -125,6 +125,27 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
             self.assertNotIn(private,clean)
         with self.assertRaises(ValueError):
             module.public_audit_report(receipt,"not-numeric","f"*40)
+    def test_only_exact_full_traffic_deployment_version_is_released(self):
+        v="123e4567-e89b-42d3-a456-426614174000"
+        deployment="aabbccdd-eeff-4411-8899-aabbccddeeff"
+        good=module.fixed_factory_deployment_identity({
+            "id":deployment,"source":"wrangler",
+            "versions":[{"version_id":v,"percentage":100}],
+            "hidden_script":"do-not-echo-this"})
+        self.assertEqual(good["deployment_id"],deployment)
+        self.assertEqual(good["full_traffic_version_id"],v)
+        self.assertTrue(good["unique_full_traffic_version"])
+        self.assertFalse(good["source_content_attested"])
+        self.assertNotIn("do-not-echo-this",str(good))
+        mixed=module.fixed_factory_deployment_identity({"id":deployment,
+            "versions":[{"version_id":v,"percentage":75},
+                        {"version_id":"bad-value","percentage":25}]})
+        self.assertIsNone(mixed["full_traffic_version_id"])
+        self.assertFalse(mixed["unique_full_traffic_version"])
+        bad=module.fixed_factory_deployment_identity({"id":"unverified",
+            "versions":[{"version_id":"malformed","percentage":100}]})
+        self.assertIsNone(bad["deployment_id"])
+        self.assertIsNone(bad["full_traffic_version_id"])
     def test_no_scope_visibility_never_proves_denial(self):
         opener=MockOpener({USER_VERIFY:403,ACCOUNT_VERIFY:403})
         with patch.object(module.urllib.request,"build_opener",return_value=opener):
