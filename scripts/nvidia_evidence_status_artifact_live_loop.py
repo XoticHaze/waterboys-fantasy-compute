@@ -70,7 +70,7 @@ def feedback(scored):
     # A deterministic model receives at most three *verified* failing examples.
     # No arbitrary caller-produced expected answers, secrets or private data.
     return [{'input':list(CASES[i]),'expected':reference(CASES[i])}
-            for i in scored['failed_case_indices'][:3]]
+            for i in scored['failed_case_indices'] if i < len(SEED)][:3]
 
 def classify(first,revised):
     a,b=score(first),score(revised) if revised is not None else None
