@@ -128,6 +128,58 @@ def legacy_deploy_token_scope_readback(token: str) -> dict:
     return out
 
 
+def scoped_existing_deploy_candidate_readback(token: str) -> dict:
+    """GET-only compare existing R2 editor against fixed current Worker names.
+
+    No mutation or write-DENY proof, no token/account policy values exported.
+    """
+    from urllib.parse import urlsplit
+    names = ("waterboys-fantasy-broker", WORKER)
+    output = {
+        "schema": "commandcenter.cloudflare.scoped_existing_editor_readonly.v1",
+        "credential_alias": "CLOUDFLARE_DEPLOY_TOKEN_R2",
+        "configured": bool(token),
+        "read_only": True,
+        "cloudflare_mutations": 0,
+        "token_value_exported": False,
+        "existing_broker_settings_http": "NOT_ATTEMPTED",
+        "protected_factory_settings_http": "NOT_ATTEMPTED",
+        "scoped_deploy_write_admission_proven": False,
+        "factory_write_denial_proven": False,
+    }
+    if not token:
+        return output
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect())
+    for worker in names:
+        # Fixed approved names only, never caller-provided paths/redirects.
+        url = API + "/accounts/" + ACCOUNT + "/workers/scripts/" + worker + "/settings"
+        req = urllib.request.Request(url, method="GET",
+            headers={"Authorization": "Bearer " + token,
+                     "Accept": "application/json",
+                     "User-Agent": "cc-factory-scoped-deploy-comparison-v1"})
+        try:
+            with opener.open(req, timeout=12) as response:
+                status, raw = response.status, response.read(120000)
+            try:
+                node = json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                node = {}
+            status = status if node.get("success") is True else "UNVERIFIED"
+        except urllib.error.HTTPError as e:
+            status = e.code
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+            status = "UNAVAILABLE"
+        field = ("existing_broker_settings_http" if worker == names[0]
+                 else "protected_factory_settings_http")
+        output[field] = status
+    return output
+
+
 def access_app_status(token: str) -> dict:
     """GET only. Never print AUD, owner email, session, policy subjects."""
     url = API + f"/accounts/{ACCOUNT}/access/apps?per_page=100&page=1"
@@ -259,6 +311,8 @@ def main() -> int:
         "runtime_source_attested": False,
         "neutral_account_mutation_authority": False,
         "existing_legacy_token_scope_metadata": legacy_deploy_token_scope_readback(token),
+        "existing_scoped_deploy_comparison": scoped_existing_deploy_candidate_readback(
+            os.getenv("CLOUDFLARE_DEPLOY_TOKEN_R2", "").strip()),
     }
     print(json.dumps(receipt, sort_keys=True))
     if settings_status != 200:
