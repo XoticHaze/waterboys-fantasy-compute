@@ -37,7 +37,7 @@ jobs:
   deploy:
     needs: contract
     permissions:
-      contents: write
+      contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
@@ -74,7 +74,7 @@ jobs:
             --config cloudflare/waterboys-broker/wrangler.jsonc
           echo 'WATERBOYS_BROKER_DEPLOYED=1'
 
-      - name: Prove WaterBoys Worker and publish R2 receipt
+      - name: Prove WaterBoys Worker and export scrubbed R2 receipt
         shell: bash
         run: |
           set -euo pipefail
@@ -121,27 +121,92 @@ jobs:
               'control_plane_pass':True,
               'public_get_method_not_allowed_pass':True,
               'secret_included':False,
+              'github_run_id':os.environ['GITHUB_RUN_ID'],
+              'source_sha':os.environ['GITHUB_SHA'],
           }
-          out=Path('rendezvous/receipts/waterboys-deploy-r2.json')
-          out.parent.mkdir(parents=True,exist_ok=True)
+          out=Path('waterboys-deploy-r2.json')
           out.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+      - name: Upload sanitized deployment proof for credential-free publisher
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: waterboys-deploy-r2-sanitized-${{ github.run_id }}
+          path: waterboys-deploy-r2.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-receipt:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    # This job receives NO Cloudflare API credentials. The deploy job above
+    # has contents:read only and cannot use its bearer to alter GitHub source.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Download sanitized proof, not the credential-bearing environment
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: waterboys-deploy-r2-sanitized-${{ github.run_id }}
+          path: ${{ runner.temp }}/waterboys-r2-proof
+      - name: Validate exact source/run identity and publish immutable plus current proof
+        shell: bash
+        env:
+          CC_WATERBOYS_PROOF: ${{ runner.temp }}/waterboys-r2-proof/waterboys-deploy-r2.json
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          receipt=json.loads(Path(os.environ['CC_WATERBOYS_PROOF']).read_text('utf-8'))
+          required={'schema','worker','credential_selection',
+                    'control_plane_pass','public_get_method_not_allowed_pass',
+                    'secret_included','github_run_id','source_sha'}
+          if set(receipt)!=required:
+              raise SystemExit('WATERBOYS_RECEIPT_UNEXPECTED_FIELD_DENIED')
+          if receipt['schema']!='waterboys.deploy_receipt.r2' or (
+              receipt['worker']!='waterboys-fantasy-broker'):
+              raise SystemExit('WATERBOYS_RECEIPT_WRONG_WORKER_DENIED')
+          if receipt['credential_selection']!='scoped_r2':
+              raise SystemExit('WATERBOYS_LEGACY_CREDENTIAL_NOT_ADMITTED')
+          if any(receipt[k] is not True for k in (
+              'control_plane_pass','public_get_method_not_allowed_pass')):
+              raise SystemExit('WATERBOYS_DEPLOY_PROOF_INCOMPLETE')
+          if receipt['secret_included'] is not False:
+              raise SystemExit('WATERBOYS_PROOF_SECRET_FLAG_DENIED')
+          run_id=str(receipt['github_run_id'])
+          if not re.fullmatch(r'[0-9]{5,20}',run_id) or run_id!=os.environ['GITHUB_RUN_ID']:
+              raise SystemExit('WATERBOYS_RUN_ID_MISMATCH')
+          sha=str(receipt['source_sha'])
+          if not re.fullmatch(r'[a-f0-9]{40}',sha) or sha!=os.environ['GITHUB_SHA']:
+              raise SystemExit('WATERBOYS_SOURCE_SHA_MISMATCH')
+          directory=Path('rendezvous/receipts')
+          directory.mkdir(parents=True,exist_ok=True)
+          current=directory/'waterboys-deploy-r2.json'
+          immutable=directory/('waterboys-deploy-r2-'+run_id+'.json')
+          if immutable.exists():
+              raise SystemExit('WATERBOYS_RELEASE_RECEIPT_REPLAY_DENIED')
+          body=json.dumps(receipt,sort_keys=True,indent=2)+'\n'
+          immutable.write_text(body,encoding='utf-8')
+          current.write_text(body,encoding='utf-8')
+          print('WATERBOYS_SCOPED_R2_IMMUTABLE_RELEASE_RECEIPT_READY=1')
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add rendezvous/receipts/waterboys-deploy-r2.json
-          if git diff --cached --quiet; then
-            echo 'WATERBOYS_DEPLOY_RECEIPT_UNCHANGED=1'
-          else
-            git commit -m 'deploy: publish WaterBoys R2 receipt'
-            for attempt in 1 2 3; do
-              if git push; then
-                break
-              fi
-              if [ "$attempt" -eq 3 ]; then
-                echo 'WaterBoys deploy receipt push failed after retry' >&2
-                exit 1
-              fi
-              git fetch origin main
-              git rebase origin/main
-            done
-          fi
+          git add rendezvous/receipts/waterboys-deploy-r2*.json
+          git diff --cached --quiet && {
+            echo "WATERBOYS_IMMUTABLE_RELEASE_RECEIPT_MISSING"; exit 1;
+          }
+          git commit -m 'deploy: publish scoped WaterBoys release receipt'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo 'WaterBoys scoped receipt push failed after retry' >&2
+              exit 1
+            fi
+            git fetch origin main
+            git rebase origin/main
+          done
