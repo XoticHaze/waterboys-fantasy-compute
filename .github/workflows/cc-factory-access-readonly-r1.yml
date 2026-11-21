@@ -80,6 +80,7 @@ jobs:
           from pathlib import Path
           doc=json.loads(Path(os.environ['CC_READBACK_SOURCE']).read_text(encoding='utf-8'))
           keys={'schema','github_run_id','github_head_sha','observed_at_utc',
+                'factory_deployment_identity',
                 'source_role','factory_settings_http','factory_id_verified',
                 'access_app_present','factory_execution_flags','legacy_token',
                 'scoped_r2_token','cloudflare_mutations','credential_values_exported',
@@ -99,6 +100,21 @@ jobs:
               raise SystemExit('READBACK_FALSE_ADMISSION')
           if doc['classification']!='GET_ONLY_SCOPE_EVIDENCE_NOT_WRITE_DENIAL_PROOF':
               raise SystemExit('READBACK_CLASSIFICATION_DENIED')
+          deployment=doc['factory_deployment_identity']
+          if not isinstance(deployment,dict) or set(deployment)!={
+              'deployment_id','full_traffic_version_id',
+              'unique_full_traffic_version','source_content_attested'}:
+              raise SystemExit('READBACK_DEPLOYMENT_FIELDS_DENIED')
+          uuid=r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
+          for field in ('deployment_id','full_traffic_version_id'):
+              value=deployment[field]
+              if value is not None and not re.fullmatch(uuid,value):
+                  raise SystemExit('READBACK_DEPLOYMENT_UUID_DENIED')
+          if deployment['unique_full_traffic_version'] is not True and deployment[
+              'full_traffic_version_id'] is not None:
+              raise SystemExit('READBACK_DEPLOYMENT_PERCENT_UNVERIFIED')
+          if deployment['source_content_attested'] is not False:
+              raise SystemExit('READBACK_FALSE_SOURCE_VERIFICATION')
           flags=doc['factory_execution_flags']
           if set(flags)!={'FACTORY_EXECUTOR_ENABLED','FACTORY_CREATE_ENABLED',
                           'FACTORY_SCOPED_TOKEN_ENABLED'} or not all(
