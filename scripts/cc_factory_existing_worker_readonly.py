@@ -43,7 +43,7 @@ def read(token: str, suffix: str) -> tuple[int, dict]:
 
 def access_app_status(token: str) -> dict:
     """GET only. Never print AUD, owner email, session, policy subjects."""
-    url = API + f"/accounts/{ACCOUNT}/access/apps?name=CC%20Shared%20Worker%20Factory&exact=true&per_page=10"
+    url = API + f"/accounts/{ACCOUNT}/access/apps?per_page=100&page=1"
     req = urllib.request.Request(
         url, method="GET",
         headers={"Authorization": "Bearer " + token,
@@ -64,6 +64,8 @@ def access_app_status(token: str) -> dict:
         return {"read_http": status, "existing_app_confirmed": False,
                 "aud_present": False, "worker_destination_found": False}
     result = data.get("result") or []
+    if isinstance(result, dict):
+        result = result.get("apps") or result.get("data") or result.get("items") or []
     if not isinstance(result, list):
         result = []
     exact = [r for r in result if isinstance(r, dict)
@@ -73,6 +75,7 @@ def access_app_status(token: str) -> dict:
     target = "shared-compute-worker-factory" in json.dumps(app, ensure_ascii=True)
     return {"read_http": status, "existing_app_confirmed": len(exact) == 1,
             "aud_present": bool(app.get("aud")), "worker_destination_found": target,
+            "returned_app_count": len(result),
             "account_id_output": False, "aud_or_identity_exported": False}
 
 
