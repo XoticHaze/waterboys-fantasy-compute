@@ -255,6 +255,27 @@ def factory_worker_id_readback(token: str) -> dict:
             "other_worker_ids_exported": False}
 
 
+def fixed_factory_deployment_identity(latest: dict) -> dict:
+    """Sanitized UUID readback from an existing immutable deployment, never source approval."""
+    import re
+    uuid = re.compile(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\Z")
+    result={"deployment_id":None, "full_traffic_version_id":None,
+            "unique_full_traffic_version":False,
+            "source_content_attested":False}
+    if not isinstance(latest,dict):return result
+    if isinstance(latest.get("id"),str) and uuid.fullmatch(latest["id"]):
+        result["deployment_id"]=latest["id"]
+    versions=latest.get("versions") or []
+    if not isinstance(versions,list) or len(versions)>50:return result
+    active=[v.get("version_id") for v in versions
+            if isinstance(v,dict) and v.get("percentage")==100
+            and isinstance(v.get("version_id"),str) and uuid.fullmatch(v["version_id"])]
+    if len(active)==1 and len(versions)==1:
+        result["full_traffic_version_id"]=active[0]
+        result["unique_full_traffic_version"]=True
+    return result
+
+
 def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
     """Allowlisted nonsecret JSON that a separate credential-free job can publish."""
     import re
@@ -276,6 +297,7 @@ def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
         "factory_settings_http": receipt.get("settings_http"),
         "factory_id_verified": bool(
             (receipt.get("existing_factory_immutable_id") or {}).get("id_verified")),
+        "factory_deployment_identity": receipt.get("factory_deployment_identity"),
         "access_app_present": bool(
             (receipt.get("protected_access_application_readback") or {}).get(
                 "existing_app_confirmed")),
@@ -339,6 +361,7 @@ def main() -> int:
         "protected_access_application_readback": access_app_status(token),
         "existing_factory_immutable_id": factory_worker_id_readback(token),
         "latest_deployment_present": bool(latest),
+        "factory_deployment_identity": fixed_factory_deployment_identity(latest),
         "latest_deployment_created_on": (latest.get("created_on")
             if isinstance(latest.get("created_on"), str) else None),
         "operator_access_audience_binding_present": "FACTORY_ACCESS_AUD" in by_name,
