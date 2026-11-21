@@ -8,7 +8,7 @@ from nvidia_evidence_status_artifact_live_loop import (
 # This is TEST AUTHOR source, not model-generated. Its purpose is checking the
 # fixed evidence oracle/AST scorer before any paid provider request.
 AUTHOR_REFERENCE='''def evidence_state(receipt, verified, queue, age_s, ttl_s, protected):
-    if receipt < 0 or receipt > 2 or verified < 0 or verified > 1 or queue < 0 or queue > 4 or age_s < 0 or ttl_s <= 0 or protected < 0 or protected > 1:
+    if not (0 <= receipt <= 2 and 0 <= verified <= 1 and 0 <= queue <= 4 and age_s >= 0 and ttl_s > 0 and 0 <= protected <= 1):
         return -1
     if receipt == 0 and verified == 1:
         return -1
@@ -16,15 +16,16 @@ AUTHOR_REFERENCE='''def evidence_state(receipt, verified, queue, age_s, ttl_s, p
         return 6
     if age_s > ttl_s:
         return 2
-    if receipt == 1 and verified == 1:
-        return 3
-    if receipt == 2 and verified == 1:
-        return 4
-    if protected == 1 and queue != 0:
+    if verified == 1:
+        if receipt == 1:
+            return 3
+        if receipt == 2:
+            return 4
+    if protected and queue:
         return 5
-    if queue == 1 or queue == 2:
+    if 1 <= queue <= 2:
         return 1
-    if queue == 3 or queue == 4:
+    if 3 <= queue <= 4:
         return 7
     return 0
 '''
