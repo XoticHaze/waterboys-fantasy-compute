@@ -9,6 +9,7 @@ on:
       - 'scripts/cc_factory_access_edge_readonly.py'
       - 'tests/test_cc_factory_access_edge_readonly.py'
       - 'scripts/cc_factory_existing_worker_readonly.py'
+      - 'tests/test_cc_factory_legacy_token_scope_readonly.py'
 
 permissions:
   contents: read
@@ -27,12 +28,15 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s tests -p 'test_cc_factory_access_edge_readonly.py' -v
+          python -m unittest discover -s tests -p 'test_cc_factory_legacy_token_scope_readonly.py' -v
           python -m py_compile scripts/cc_factory_existing_worker_readonly.py
       - name: Anonymous fixed production endpoint denies
         shell: bash
         run: |
           set -euo pipefail
           python scripts/cc_factory_access_edge_readonly.py
+      # Includes redacted GET-only self-token metadata discriminator. It does
+      # not prove protected Worker rewrite DENY and cannot issue or revoke tokens.
       - name: Existing Cloudflare Workers setting and owner binding presence
         shell: bash
         run: |
