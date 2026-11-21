@@ -54,6 +54,22 @@ class EvidenceStatusTests(unittest.TestCase):
     def test_disallowed_model_code_not_imported(self):
         bad='def evidence_state(receipt, verified, queue, age_s, ttl_s, protected):\n    import os\n    return 3\n'
         self.assertFalse(score(bad)['source_ast_admitted'])
+    def test_structurally_rejected_initial_source_is_not_feedback_learning(self):
+        invalid='def evidence_state(receipt, verified, queue, age_s, ttl_s, protected):\\n    import os\\n    return 3\\n'.replace('\\n','\n')
+        report=score(invalid)
+        self.assertFalse(report['source_ast_admitted'])
+        self.assertEqual(feedback(report),[])
+        attempt=classify(invalid,AUTHOR_REFERENCE)
+        self.assertEqual(attempt['outcome'],'BASELINE_STRUCTURE_REJECTED')
+        self.assertEqual(attempt['newly_correct_count'],0)
+        self.assertEqual(attempt['regressions_count'],0)
+    def test_structurally_rejected_revision_never_reports_gain(self):
+        valid='def evidence_state(receipt, verified, queue, age_s, ttl_s, protected):\\n    return 0\\n'.replace('\\n','\n')
+        invalid='def evidence_state(receipt, verified, queue, age_s, ttl_s, protected):\\n    import os\\n    return 3\\n'.replace('\\n','\n')
+        attempt=classify(valid,invalid)
+        self.assertEqual(attempt['outcome'],'REVISION_STRUCTURE_REJECTED')
+        self.assertEqual(attempt['newly_correct_count'],0)
+        self.assertEqual(attempt['regressions_count'],0)
     def test_feedback_has_independently_recomputed_values(self):
         broken='def evidence_state(receipt, verified, queue, age_s, ttl_s, protected):\n    return 0\n'
         report=score(broken)

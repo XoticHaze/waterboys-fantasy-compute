@@ -64,7 +64,7 @@ def score(source):
     return {**out,'source_ast_admitted':True}
 
 def feedback(scored):
-    if scored['passed']==scored['total']:return []
+    if not scored['source_ast_admitted'] or scored['passed']==scored['total']:return []
     # A deterministic model receives at most three *verified* failing examples.
     # No arbitrary caller-produced expected answers, secrets or private data.
     return [{'input':list(CASES[i]),'expected':reference(CASES[i])}
@@ -72,8 +72,11 @@ def feedback(scored):
 
 def classify(first,revised):
     a,b=score(first),score(revised) if revised is not None else None
-    if a['passed']==len(CASES):result='FIRST_DRAFT_PASSED_NO_CORRECTION'
+    semantic_pair=a['source_ast_admitted'] and b is not None and b['source_ast_admitted']
+    if not a['source_ast_admitted']:result='BASELINE_STRUCTURE_REJECTED'
+    elif a['passed']==len(CASES):result='FIRST_DRAFT_PASSED_NO_CORRECTION'
     elif b is None:result='REVISION_UNAVAILABLE'
+    elif not b['source_ast_admitted']:result='REVISION_STRUCTURE_REJECTED'
     else:
         old=set(a['failed_case_indices']);new=set(b['failed_case_indices'])
         if not new and old:result='CORRECTED_ALL_HOLDOUTS'
@@ -81,8 +84,8 @@ def classify(first,revised):
         elif new-old:result='REGRESSED_REJECTED'
         else:result='NO_GAIN'
     return {'baseline':a,'revised':b,'outcome':result,
-            'newly_correct_count':len(set(a['failed_case_indices'])-set(b['failed_case_indices'])) if b else 0,
-            'regressions_count':len(set(b['failed_case_indices'])-set(a['failed_case_indices'])) if b else 0,
+            'newly_correct_count':len(set(a['failed_case_indices'])-set(b['failed_case_indices'])) if semantic_pair else 0,
+            'regressions_count':len(set(b['failed_case_indices'])-set(a['failed_case_indices'])) if semantic_pair else 0,
             'same_source':revised==first if revised is not None else None}
 
 def validate_reply(doc,stage):
@@ -128,7 +131,7 @@ def main():
     first=call({'stage':0})
     a=score(first)
     print('EVIDENCE_STATUS_BASELINE='+str(a['passed'])+'/'+str(a['total']),flush=True)
-    second=call({'stage':1,'source':first,'failed_examples':feedback(a)}) if a['passed']!=a['total'] else None
+    second=call({'stage':1,'source':first,'failed_examples':feedback(a)}) if a['source_ast_admitted'] and a['passed']!=a['total'] else None
     result=persist(first,second,classify(first,second))
     print('EVIDENCE_STATUS_REVIEW='+json.dumps({'outcome':result['outcome'],
         'newly_correct_count':result['newly_correct_count'],
