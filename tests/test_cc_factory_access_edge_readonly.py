@@ -68,5 +68,29 @@ class ExistingAccessAppMetadataTests(unittest.TestCase):
         self.assertNotIn("never-echo-this-aud",str(result))
         self.assertNotIn("private-owner@example.com",str(result))
 
+class ExistingFactoryImmutableIdTests(unittest.TestCase):
+    def test_only_exact_existing_factory_id_leaves_reader(self):
+        import json
+        from unittest.mock import patch
+        spec3=importlib.util.spec_from_file_location(
+            "cc_factory_existing_worker_readonly",
+            SCRIPT.parents[1] / "scripts/cc_factory_existing_worker_readonly.py")
+        module=importlib.util.module_from_spec(spec3)
+        spec3.loader.exec_module(module)
+        class FakeHttp:
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self,cap):
+                return json.dumps({"success":True,"result":[
+                    {"name":"some-other-worker","id":"b"*32},
+                    {"name":"shared-compute-worker-factory","id":"a"*32}
+                ]}).encode()
+        with patch.object(module.urllib.request,"urlopen",return_value=FakeHttp()):
+            result=module.factory_worker_id_readback("fixed-placeholder-token")
+        self.assertTrue(result["id_verified"])
+        self.assertEqual(result["factory_worker_id"],"a"*32)
+        self.assertNotIn("b"*32,str(result))
+        self.assertEqual(result["other_worker_ids_exported"],False)
+
 if __name__=="__main__":
     unittest.main()
