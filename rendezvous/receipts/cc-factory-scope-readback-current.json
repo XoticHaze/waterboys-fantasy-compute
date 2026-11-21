@@ -1,0 +1,34 @@
+{
+  "access_app_present": false,
+  "classification": "GET_ONLY_SCOPE_EVIDENCE_NOT_WRITE_DENIAL_PROOF",
+  "cloudflare_mutations": 0,
+  "credential_values_exported": false,
+  "factory_execution_flags": {
+    "FACTORY_CREATE_ENABLED": "0",
+    "FACTORY_EXECUTOR_ENABLED": "0",
+    "FACTORY_SCOPED_TOKEN_ENABLED": "0"
+  },
+  "factory_id_verified": true,
+  "factory_settings_http": 200,
+  "github_head_sha": "4da6053f33523ce43a8f70b79e7ebf82cb5d2321",
+  "github_run_id": "44902101522",
+  "legacy_token": {
+    "allows_present": null,
+    "denies_present": null,
+    "policy_entry_count": null,
+    "policy_shape": "UNAVAILABLE",
+    "self_detail_http": 403,
+    "self_verify_http": 200,
+    "token_identity_class": "USER_TOKEN"
+  },
+  "observed_at_utc": "2026-11-21T12:04:49.329762+00:00",
+  "release_or_admin_admitted": false,
+  "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
+  "scoped_r2_token": {
+    "configured": false,
+    "existing_broker_settings_http": "NOT_ATTEMPTED",
+    "protected_factory_settings_http": "NOT_ATTEMPTED"
+  },
+  "source_role": "EXISTING_WATERBOYS_PUBLIC_READONLY_WORKFLOW",
+  "write_denial_proven": false
+}
