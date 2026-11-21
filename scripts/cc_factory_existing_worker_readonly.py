@@ -255,6 +255,47 @@ def factory_worker_id_readback(token: str) -> dict:
             "other_worker_ids_exported": False}
 
 
+def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
+    """Allowlisted nonsecret JSON that a separate credential-free job can publish."""
+    import re
+    from datetime import datetime, timezone
+    if not re.fullmatch(r"[0-9]{5,20}", run_id) or not re.fullmatch(
+            r"[a-f0-9]{40}", head_sha):
+        raise ValueError("missing_exact_public_run_identity")
+    legacy = receipt.get("existing_legacy_token_scope_metadata") or {}
+    scoped = receipt.get("existing_scoped_deploy_comparison") or {}
+    flags = receipt.get("activation_flags") or {}
+    def values(data, names):
+        return {k: data.get(k) for k in names}
+    return {
+        "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
+        "github_run_id": run_id,
+        "github_head_sha": head_sha,
+        "observed_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source_role": "EXISTING_WATERBOYS_PUBLIC_READONLY_WORKFLOW",
+        "factory_settings_http": receipt.get("settings_http"),
+        "factory_id_verified": bool(
+            (receipt.get("existing_factory_immutable_id") or {}).get("id_verified")),
+        "access_app_present": bool(
+            (receipt.get("protected_access_application_readback") or {}).get(
+                "existing_app_confirmed")),
+        "factory_execution_flags": values(flags, (
+            "FACTORY_EXECUTOR_ENABLED", "FACTORY_CREATE_ENABLED",
+            "FACTORY_SCOPED_TOKEN_ENABLED")),
+        "legacy_token": values(legacy, (
+            "token_identity_class", "self_verify_http", "self_detail_http",
+            "policy_shape", "policy_entry_count", "allows_present", "denies_present")),
+        "scoped_r2_token": values(scoped, (
+            "configured", "existing_broker_settings_http",
+            "protected_factory_settings_http")),
+        "cloudflare_mutations": 0,
+        "credential_values_exported": False,
+        "write_denial_proven": False,
+        "release_or_admin_admitted": False,
+        "classification": "GET_ONLY_SCOPE_EVIDENCE_NOT_WRITE_DENIAL_PROOF",
+    }
+
+
 def main() -> int:
     if os.getenv("CLOUDFLARE_ACCOUNT_ID") != ACCOUNT:
         raise SystemExit("FACTORY_AUDIT_WRONG_ACCOUNT")
@@ -315,6 +356,12 @@ def main() -> int:
             os.getenv("CLOUDFLARE_DEPLOY_TOKEN_R2", "").strip()),
     }
     print(json.dumps(receipt, sort_keys=True))
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        from pathlib import Path
+        safe = public_audit_report(receipt, os.environ.get("GITHUB_RUN_ID", ""),
+                                   os.environ.get("GITHUB_SHA", ""))
+        Path("cc-factory-readback.json").write_text(
+            json.dumps(safe, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     if settings_status != 200:
         raise SystemExit("FACTORY_READBACK_HOLD_SETTINGS_NOT_ACCESSIBLE")
     print("CC_EXISTING_FACTORY_WORKER_SETTINGS_READABLE=PASS")
