@@ -1,0 +1,22 @@
+name: Agent Fabric Feedback Translation Capsule Offline Contract
+# Offline-only, public fictional source, no provider credentials or private jobs.
+on:
+  pull_request:
+    paths:
+      - scripts/nvidia_agent_feedback_capsule.py
+      - tests/test_nvidia_agent_feedback_capsule.py
+      - .github/workflows/nvidia-agent-feedback-capsule-offline.yml
+permissions:
+  contents: read
+jobs:
+  deterministic-feedback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify actual vs expected, categorized failures and preservation cases
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/nvidia_agent_feedback_capsule.py
+          python3 -m unittest discover -s tests -p 'test_nvidia_agent_feedback_capsule.py' -v
+          echo AGENT_FEEDBACK_CAPSULE_OFFLINE_CONTRACT=PASS
