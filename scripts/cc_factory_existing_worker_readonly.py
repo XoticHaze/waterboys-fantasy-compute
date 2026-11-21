@@ -80,8 +80,12 @@ def legacy_deploy_token_scope_readback(token: str) -> dict:
             headers={"Authorization": "Bearer " + token,
                      "Accept": "application/json",
                      "User-Agent": "cc-factory-existing-token-metadata-readonly-v1"})
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+        opener = urllib.request.build_opener(NoRedirect())
         try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
+            with opener.open(req, timeout=12) as resp:
                 status, raw = resp.status, resp.read(65536)
         except urllib.error.HTTPError as e:
             return e.code, {}
