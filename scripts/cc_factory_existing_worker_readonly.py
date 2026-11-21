@@ -41,6 +41,89 @@ def read(token: str, suffix: str) -> tuple[int, dict]:
         return status, {}
     return status, data if isinstance(data, dict) else {}
 
+def legacy_deploy_token_scope_readback(token: str) -> dict:
+    """GET-only self-token scope metadata. Never log token ID, name, grants or email.
+
+    Cloudflare may deny detail even when the token successfully deploys. This
+    result is a discriminator, NEVER a proof of effective write DENY.
+    """
+    import re
+    paths = [
+        ("USER_TOKEN", "/user/tokens/verify", "/user/tokens/"),
+        ("ACCOUNT_TOKEN", "/accounts/" + ACCOUNT + "/tokens/verify",
+         "/accounts/" + ACCOUNT + "/tokens/"),
+    ]
+    out = {
+        "schema": "commandcenter.cloudflare.factory_legacy_token_metadata.v1",
+        "credential_role": "EXISTING_WATERBOYS_PUBLIC_RUNNER_DEPLOY_TOKEN",
+        "read_only": True, "cloudflare_mutations": 0,
+        "credential_values_exported": False, "token_id_exported": False,
+        "token_name_or_email_exported": False, "policy_resources_exported": False,
+        "factory_write_denial_live_proven": False,
+        "token_identity_class": "NOT_VERIFIED",
+        "self_verify_http": "NOT_VERIFIED",
+        "self_detail_http": "NOT_ATTEMPTED",
+        "policy_shape": "UNAVAILABLE",
+        "manual_scope_review_still_required": True,
+    }
+
+    def get(suffix: str) -> tuple[int | str, dict]:
+        # A caller may never add arbitrary API paths, use POST or follow redirects.
+        allowed = (suffix == "/user/tokens/verify"
+                   or suffix == "/accounts/" + ACCOUNT + "/tokens/verify"
+                   or bool(re.fullmatch(r"/user/tokens/[a-f0-9]{32}", suffix))
+                   or bool(re.fullmatch(
+                       r"/accounts/" + ACCOUNT + r"/tokens/[a-f0-9]{32}", suffix)))
+        if not allowed:
+            raise ValueError("unapproved_cloudflare_token_metadata_path")
+        req = urllib.request.Request(API + suffix, method="GET",
+            headers={"Authorization": "Bearer " + token,
+                     "Accept": "application/json",
+                     "User-Agent": "cc-factory-existing-token-metadata-readonly-v1"})
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                status, raw = resp.status, resp.read(65536)
+        except urllib.error.HTTPError as e:
+            return e.code, {}
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+            return "UNAVAILABLE", {}
+        if status != 200:
+            return status, {}
+        try:
+            doc = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return status, {}
+        return status, doc if isinstance(doc, dict) else {}
+
+    for role, verify_path, detail_prefix in paths:
+        http, document = get(verify_path)
+        result = document.get("result") if document.get("success") is True else None
+        if not isinstance(result, dict) or not re.fullmatch(
+                r"[a-f0-9]{32}", str(result.get("id", ""))) or (
+                result.get("status") != "active"):
+            continue
+        out["token_identity_class"] = role
+        out["self_verify_http"] = http
+        status, details = get(detail_prefix + result["id"])
+        out["self_detail_http"] = status
+        node = details.get("result") if details.get("success") is True else None
+        if isinstance(node, dict) and isinstance(node.get("policies"), list):
+            policies = node["policies"]
+            valid = (len(policies) < 100 and all(
+                isinstance(x, dict) and x.get("effect") in ("allow", "deny")
+                and isinstance(x.get("resources"), dict) for x in policies))
+            out["policy_shape"] = (
+                "VISIBLE_REQUIRES_INDEPENDENT_EFFECTIVE_DENY_PROOF"
+                if valid else "UNEXPECTED_DETAILS")
+            out["policy_entry_count"] = len(policies) if valid else None
+            out["allows_present"] = (any(x.get("effect") == "allow"
+                                         for x in policies) if valid else None)
+            out["denies_present"] = (any(x.get("effect") == "deny"
+                                        for x in policies) if valid else None)
+        return out
+    return out
+
+
 def access_app_status(token: str) -> dict:
     """GET only. Never print AUD, owner email, session, policy subjects."""
     url = API + f"/accounts/{ACCOUNT}/access/apps?per_page=100&page=1"
@@ -171,6 +254,7 @@ def main() -> int:
         "credential_values_exported": False,
         "runtime_source_attested": False,
         "neutral_account_mutation_authority": False,
+        "existing_legacy_token_scope_metadata": legacy_deploy_token_scope_readback(token),
     }
     print(json.dumps(receipt, sort_keys=True))
     if settings_status != 200:
