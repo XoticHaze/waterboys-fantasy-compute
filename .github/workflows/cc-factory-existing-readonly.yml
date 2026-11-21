@@ -1,13 +1,15 @@
 name: CC Existing Shared Factory Read-Only Inventory
 
-# This only performs bounded GETs using the EXISTING ordinary-account token.
-# It does not list token values, create Workers, edit Cloudflare or deploy code.
+# Bounded GET-only checks using EXISTING ordinary-account credential.
+# Neither check sends asset bytes or performs Cloudflare mutation/deploy.
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/cc-factory-existing-readonly.yml'
       - 'scripts/cc_factory_existing_worker_readonly.py'
+      - 'scripts/cc_incomeengine_studio_cloudflare_readonly.py'
+      - 'tests/test_cc_incomeengine_studio_cloudflare_readonly.py'
 
 permissions:
   contents: read
@@ -27,3 +29,10 @@ jobs:
           set -euo pipefail
           python -m py_compile scripts/cc_factory_existing_worker_readonly.py
           python scripts/cc_factory_existing_worker_readonly.py
+      - name: Inspect IncomeEngine Studio zone / DNS / Access with fixed GETs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_cc_incomeengine_studio_cloudflare_readonly.py' -v
+          python -m py_compile scripts/cc_incomeengine_studio_cloudflare_readonly.py
+          python scripts/cc_incomeengine_studio_cloudflare_readonly.py
