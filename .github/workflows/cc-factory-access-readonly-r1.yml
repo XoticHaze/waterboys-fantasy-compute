@@ -40,6 +40,17 @@ jobs:
           python -m py_compile scripts/cc_factory_existing_worker_readonly.py
           python -m unittest discover -s tests -p 'test_cloudflare_r2_scope_preflight.py' -v
           python -m py_compile scripts/cloudflare_r2_scope_preflight.py
+      # When the preexisting narrow R2 secret is enrolled, require the complete
+      # fixed Worker allow/deny readback BEFORE any broker deployment. This
+      # job has contents:read and performs only GET Cloudflare metadata.
+      - name: Verify enrolled narrow R2 Worker metadata scope without mutation
+        if: ${{ env.CLOUDFLARE_DEPLOY_TOKEN_R2 != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_DEPLOY_TOKEN_R2 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cloudflare_r2_scope_preflight.py
       - name: Anonymous fixed production endpoint denies
         shell: bash
         run: |
