@@ -79,6 +79,43 @@ def access_app_status(token: str) -> dict:
             "account_id_output": False, "aud_or_identity_exported": False}
 
 
+def factory_worker_id_readback(token: str) -> dict:
+    """Strict GET-only resolve of target immutable ID; no unrelated rows escape."""
+    import re
+    found = []
+    try:
+        for page in range(1, 11):
+            req = urllib.request.Request(
+                API + f"/accounts/{ACCOUNT}/workers/workers?per_page=100&page={page}",
+                method="GET", headers={
+                    "Authorization": "Bearer " + token,
+                    "Accept": "application/json",
+                    "User-Agent": "cc-factory-id-readonly-v1"})
+            with urllib.request.urlopen(req, timeout=16) as response:
+                data = json.loads(response.read(120000))
+            if not isinstance(data, dict) or data.get("success") is not True:
+                return {"status": "GET_REJECTED", "id_verified": False}
+            rows = data.get("result") or []
+            if isinstance(rows, dict):
+                rows = rows.get("workers") or rows.get("data") or list(rows.values())
+            if not isinstance(rows, list):
+                return {"status": "UNEXPECTED_RESPONSE", "id_verified": False}
+            found.extend([r for r in rows if isinstance(r, dict)
+                          and r.get("name") == WORKER])
+            if len(rows) < 100:
+                break
+        else:
+            return {"status": "PAGINATION_INCOMPLETE", "id_verified": False}
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
+            ValueError, UnicodeDecodeError):
+        return {"status": "READ_UNAVAILABLE", "id_verified": False}
+    if len(found) != 1 or not re.fullmatch(r"[a-f0-9]{32}", str(found[0].get("id", ""))):
+        return {"status": "FACTORY_ID_NOT_UNIQUE_OR_MISSING", "id_verified": False}
+    return {"status": "EXACT_IMMUTABLE_FACTORY_ID_VERIFIED",
+            "id_verified": True, "factory_worker_id": found[0]["id"],
+            "other_worker_ids_exported": False}
+
+
 def main() -> int:
     if os.getenv("CLOUDFLARE_ACCOUNT_ID") != ACCOUNT:
         raise SystemExit("FACTORY_AUDIT_WRONG_ACCOUNT")
@@ -120,6 +157,7 @@ def main() -> int:
         "privileged_binding_presence": privileged,
         "ledger_binding_present": "FACTORY_LEDGER" in by_name,
         "protected_access_application_readback": access_app_status(token),
+        "existing_factory_immutable_id": factory_worker_id_readback(token),
         "latest_deployment_present": bool(latest),
         "latest_deployment_created_on": (latest.get("created_on")
             if isinstance(latest.get("created_on"), str) else None),
