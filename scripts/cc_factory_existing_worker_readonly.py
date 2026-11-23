@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 import os
+import hashlib
 import urllib.error
 import urllib.request
 
@@ -222,6 +223,36 @@ def access_app_status(token: str) -> dict:
             "account_id_output": False, "aud_or_identity_exported": False}
 
 
+def factory_script_fingerprint_readback(token: str) -> dict:
+    """GET-only bounded raw script hash, never export source or bearer."""
+    result={"http_status":"NOT_VERIFIED","sha256":None,"byte_length":None,
+            "complete_read":False,"source_equals_reviewed_commit":False,
+            "source_bytes_exported":False}
+    if not token:return result
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,req,fp,code,msg,headers,newurl):
+            return None
+    opener=urllib.request.build_opener(NoRedirect())
+    url=API+"/accounts/"+ACCOUNT+"/workers/scripts/"+WORKER
+    req=urllib.request.Request(url,method="GET",headers={
+        "Authorization":"Bearer "+token,"Accept":"application/octet-stream",
+        "User-Agent":"cc-factory-script-fingerprint-readonly-v1"})
+    try:
+        with opener.open(req,timeout=16) as resp:
+            status=resp.status
+            raw=resp.read(1048577)
+    except urllib.error.HTTPError as exc:
+        result["http_status"]=exc.code
+        return result
+    except (urllib.error.URLError,TimeoutError,ValueError,OSError):
+        return result
+    result["http_status"]=status
+    if status!=200 or not raw or len(raw)>1048576:return result
+    result.update(sha256=hashlib.sha256(raw).hexdigest(),
+                  byte_length=len(raw),complete_read=True)
+    return result
+
+
 def factory_worker_id_readback(token: str) -> dict:
     """Strict GET-only resolve of target immutable ID; no unrelated rows escape."""
     import re
@@ -303,6 +334,14 @@ def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
         "factory_id_verified": bool(
             (receipt.get("existing_factory_immutable_id") or {}).get("id_verified")),
         "factory_deployment_identity": receipt.get("factory_deployment_identity"),
+        "factory_script_fingerprint": {
+            "http_status": (receipt.get("factory_script_fingerprint") or {}).get("http_status","NOT_VERIFIED"),
+            "sha256": (receipt.get("factory_script_fingerprint") or {}).get("sha256"),
+            "byte_length": (receipt.get("factory_script_fingerprint") or {}).get("byte_length"),
+            "complete_read": bool((receipt.get("factory_script_fingerprint") or {}).get("complete_read")),
+            "source_equals_reviewed_commit": False,
+            "source_bytes_exported": False,
+        },
         "access_app_present": bool(
             (receipt.get("protected_access_application_readback") or {}).get(
                 "existing_app_confirmed")),
@@ -373,6 +412,7 @@ def main() -> int:
         "existing_factory_immutable_id": factory_worker_id_readback(token),
         "latest_deployment_present": bool(latest),
         "factory_deployment_identity": fixed_factory_deployment_identity(latest),
+        "factory_script_fingerprint": factory_script_fingerprint_readback(token),
         "latest_deployment_created_on": (latest.get("created_on")
             if isinstance(latest.get("created_on"), str) else None),
         "operator_access_audience_binding_present": "FACTORY_ACCESS_AUD" in by_name,
