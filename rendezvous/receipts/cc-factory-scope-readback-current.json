@@ -26,8 +26,8 @@
     "FACTORY_WORKERS_ADMIN": "NOT_LISTED"
   },
   "factory_settings_http": 200,
-  "github_head_sha": "6660f8b07a2b9d7bbbff6a70f34f4762c31de7b9",
-  "github_run_id": "45129436489",
+  "github_head_sha": "1fdb8a2513fb6e7374abb9d581608e5108d418ac",
+  "github_run_id": "45129638183",
   "legacy_token": {
     "allows_present": null,
     "denies_present": null,
@@ -37,7 +37,7 @@
     "self_verify_http": 200,
     "token_identity_class": "USER_TOKEN"
   },
-  "observed_at_utc": "2026-11-23T07:12:46.149650+00:00",
+  "observed_at_utc": "2026-11-23T07:14:29.419411+00:00",
   "release_or_admin_admitted": false,
   "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
   "scoped_r2_token": {
