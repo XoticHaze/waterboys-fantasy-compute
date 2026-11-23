@@ -214,6 +214,31 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertIsNone(r["byte_length"])
         self.assertFalse(r["complete_read"])
 
+    def test_empty_script_has_no_digest_even_with_http200(self):
+        class Empty:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,n):return b""
+        class Opener:
+            def open(self,request,timeout=None):return Empty()
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            result=module.factory_script_fingerprint_readback("private-bearer")
+        self.assertEqual(result["http_status"],200)
+        self.assertIsNone(result["sha256"])
+        self.assertFalse(result["complete_read"])
+
+    def test_script_get_redirect_is_not_followed_or_hashed(self):
+        class Opener:
+            def open(self,request,timeout=None):
+                raise urllib.error.HTTPError(request.full_url,302,"redirect",
+                                             {"Location":"https://unapproved.example/"},None)
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            result=module.factory_script_fingerprint_readback("private-bearer")
+        self.assertEqual(result["http_status"],302)
+        self.assertIsNone(result["sha256"])
+        self.assertFalse(result["complete_read"])
+
     def test_script_get_http403_never_promotes_source_identity(self):
         class Opener:
             def open(self,request,timeout=None):
