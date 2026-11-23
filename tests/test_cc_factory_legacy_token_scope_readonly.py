@@ -111,7 +111,9 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
               "FACTORY_MACHINE_INSPECT_ENABLED":"0"},
             "factory_script_fingerprint":{"http_status":200,"sha256":"f"*64,
               "byte_length":12,"complete_read":True,
-              "source_equals_reviewed_commit":False,"source_bytes_exported":False},
+              "source_equals_reviewed_commit":False,"source_bytes_exported":False,
+              "hash_basis":"CANONICAL_MULTIPART_PARTS_V1",
+              "response_media_type":"multipart/form-data","part_count":2},
             "privileged_binding_presence":{
               "FACTORY_WORKERS_ADMIN":"malicious-secret-value",
               "FACTORY_TOKEN_ISSUER":"NOT_LISTED",
@@ -130,6 +132,8 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(r["github_run_id"],"44900012345")
         self.assertEqual(r["factory_execution_flags"]["FACTORY_EXECUTOR_ENABLED"],"0")
         self.assertEqual(r["factory_script_fingerprint"]["sha256"],"f"*64)
+        self.assertEqual(r["factory_script_fingerprint"]["hash_basis"],"CANONICAL_MULTIPART_PARTS_V1")
+        self.assertEqual(r["factory_script_fingerprint"]["part_count"],2)
         self.assertFalse(r["factory_script_fingerprint"]["source_equals_reviewed_commit"])
         self.assertFalse(r["factory_script_fingerprint"]["source_bytes_exported"])
         self.assertEqual(r["factory_execution_flags"]["FACTORY_STAGE_VERSION_ENABLED"],"0")
@@ -192,6 +196,8 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(r["sha256"],hashlib.sha256(data).hexdigest())
         self.assertEqual(r["byte_length"],len(data))
         self.assertTrue(r["complete_read"])
+        self.assertEqual(r["hash_basis"],"RAW_HTTP_BODY_UNVERIFIED_STABILITY")
+        self.assertIsNone(r["part_count"])
         self.assertEqual(calls,[("GET",module.API+"/accounts/"+module.ACCOUNT+
                                "/workers/scripts/"+module.WORKER)])
         self.assertFalse(r["source_equals_reviewed_commit"])
@@ -248,6 +254,56 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(r["http_status"],403)
         self.assertIsNone(r["sha256"])
         self.assertFalse(r["source_equals_reviewed_commit"])
+
+    def test_normalized_multipart_sha_independent_of_random_http_boundary(self):
+        body=b"export default {fetch(){return new Response('fixed-source');}}"
+        def wire(boundary):
+            typ="multipart/form-data; boundary="+boundary
+            raw=(b"--"+boundary.encode()+b"\r\n"+
+                 b'Content-Disposition: form-data; name="script"; filename="index.js"\r\n'+
+                 b'Content-Type: application/javascript\r\n\r\n'+body+
+                 b"\r\n--"+boundary.encode()+b"--\r\n")
+            return typ,raw
+        type1,raw1=wire("ABCD123")
+        type2,raw2=wire("DIFFERENTBOUNDARY456")
+        self.assertNotEqual(hashlib.sha256(raw1).hexdigest(),
+                            hashlib.sha256(raw2).hexdigest())
+        first=module.canonical_multipart_fingerprint(raw1,type1)
+        second=module.canonical_multipart_fingerprint(raw2,type2)
+        self.assertIsNotNone(first)
+        self.assertEqual(first,second)
+        self.assertEqual(first[1],1)
+        self.assertEqual(first[2],"multipart/form-data")
+        self.assertIsNone(module.canonical_multipart_fingerprint(
+            raw1,"multipart/form-data; boundary=WRONGBOUNDARY"))
+        self.assertIsNone(module.canonical_multipart_fingerprint(
+            raw1,"multipart/form-data; boundary=ABCD123\r\nX-Leak: private"))
+
+    def test_real_readback_multipart_digest_is_canonical_and_secret_free(self):
+        body=b"secret-source-only-opaque-content"
+        boundary="THIS_BOUNDARY_CHANGES"
+        raw=(b"--"+boundary.encode()+b"\r\n"+
+             b'Content-Disposition: form-data; name="code"; filename="index.js"\r\n'+
+             b'Content-Type: application/javascript\r\n\r\n'+body+
+             b"\r\n--"+boundary.encode()+b"--\r\n")
+        class Response:
+            status=200
+            headers={"Content-Type":"multipart/form-data; boundary="+boundary}
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,n):return raw[:n]
+        class Opener:
+            def open(self,request,timeout=None):return Response()
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            result=module.factory_script_fingerprint_readback("private-bearer")
+        self.assertEqual(result["hash_basis"],"CANONICAL_MULTIPART_PARTS_V1")
+        self.assertEqual(result["response_media_type"],"multipart/form-data")
+        self.assertEqual(result["part_count"],1)
+        self.assertEqual(result["sha256"],module.canonical_multipart_fingerprint(
+            raw,Response.headers["Content-Type"])[0])
+        self.assertNotEqual(result["sha256"],hashlib.sha256(raw).hexdigest())
+        self.assertNotIn("secret-source-only-opaque-content",str(result))
+        self.assertNotIn("private-bearer",str(result))
 
 if __name__=="__main__":
     unittest.main()
