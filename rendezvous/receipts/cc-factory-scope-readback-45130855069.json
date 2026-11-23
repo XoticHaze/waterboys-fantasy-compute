@@ -1,0 +1,58 @@
+{
+  "access_app_present": false,
+  "classification": "GET_ONLY_SCOPE_EVIDENCE_NOT_WRITE_DENIAL_PROOF",
+  "cloudflare_mutations": 0,
+  "credential_values_exported": false,
+  "factory_deployment_identity": {
+    "deployment_id": "85879fcc-36d1-4c5d-b0c6-484b4159af5a",
+    "full_traffic_version_id": "748797de-8fbb-42e9-8054-225086827a0c",
+    "source_content_attested": false,
+    "unique_full_traffic_version": true
+  },
+  "factory_execution_flags": {
+    "FACTORY_CREATE_ENABLED": "0",
+    "FACTORY_EXECUTOR_ENABLED": "0",
+    "FACTORY_INSPECT_ENABLED": "UNVERIFIED",
+    "FACTORY_MACHINE_INSPECT_ENABLED": "UNVERIFIED",
+    "FACTORY_MACHINE_READONLY_ENABLED": "UNVERIFIED",
+    "FACTORY_SCOPED_TOKEN_ENABLED": "0",
+    "FACTORY_STAGE_VERSION_ENABLED": "UNVERIFIED"
+  },
+  "factory_id_verified": true,
+  "factory_privileged_bindings": {
+    "FACTORY_QUEUE_GITHUB_TOKEN": "NOT_LISTED",
+    "FACTORY_SECRET_WRITER": "NOT_LISTED",
+    "FACTORY_TOKEN_ISSUER": "NOT_LISTED",
+    "FACTORY_WORKERS_ADMIN": "NOT_LISTED"
+  },
+  "factory_script_fingerprint": {
+    "byte_length": 20258,
+    "complete_read": true,
+    "http_status": 200,
+    "sha256": "f870185aea47505e370a69057892e3a2dcc9c8496690905f5c5084f483df32b8",
+    "source_bytes_exported": false,
+    "source_equals_reviewed_commit": false
+  },
+  "factory_settings_http": 200,
+  "github_head_sha": "a4e3969e85d649f57437fd4cad316ea17897d155",
+  "github_run_id": "45130855069",
+  "legacy_token": {
+    "allows_present": null,
+    "denies_present": null,
+    "policy_entry_count": null,
+    "policy_shape": "UNAVAILABLE",
+    "self_detail_http": 403,
+    "self_verify_http": 200,
+    "token_identity_class": "USER_TOKEN"
+  },
+  "observed_at_utc": "2026-11-23T07:24:40.707527+00:00",
+  "release_or_admin_admitted": false,
+  "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
+  "scoped_r2_token": {
+    "configured": false,
+    "existing_broker_settings_http": "NOT_ATTEMPTED",
+    "protected_factory_settings_http": "NOT_ATTEMPTED"
+  },
+  "source_role": "EXISTING_WATERBOYS_PUBLIC_READONLY_WORKFLOW",
+  "write_denial_proven": false
+}

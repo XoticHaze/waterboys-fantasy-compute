@@ -29,13 +29,13 @@
     "byte_length": 20258,
     "complete_read": true,
     "http_status": 200,
-    "sha256": "d64593d50ee3a1ff814c213ced73173676c56c25ec0f0c5b0bd954953abdfe6a",
+    "sha256": "f870185aea47505e370a69057892e3a2dcc9c8496690905f5c5084f483df32b8",
     "source_bytes_exported": false,
     "source_equals_reviewed_commit": false
   },
   "factory_settings_http": 200,
-  "github_head_sha": "f47832b7d634305f71107e22e036eab9a4cc90e7",
-  "github_run_id": "45130588191",
+  "github_head_sha": "a4e3969e85d649f57437fd4cad316ea17897d155",
+  "github_run_id": "45130855069",
   "legacy_token": {
     "allows_present": null,
     "denies_present": null,
@@ -45,7 +45,7 @@
     "self_verify_http": 200,
     "token_identity_class": "USER_TOKEN"
   },
-  "observed_at_utc": "2026-11-23T07:22:21.406373+00:00",
+  "observed_at_utc": "2026-11-23T07:24:40.707527+00:00",
   "release_or_admin_admitted": false,
   "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
   "scoped_r2_token": {
