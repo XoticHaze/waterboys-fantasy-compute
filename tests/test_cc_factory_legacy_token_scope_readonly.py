@@ -2,6 +2,7 @@
 from __future__ import annotations
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -108,6 +109,9 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
               "FACTORY_INSPECT_ENABLED":"0","FACTORY_STAGE_VERSION_ENABLED":"0",
               "FACTORY_MACHINE_READONLY_ENABLED":"0",
               "FACTORY_MACHINE_INSPECT_ENABLED":"0"},
+            "factory_script_fingerprint":{"http_status":200,"sha256":"f"*64,
+              "byte_length":12,"complete_read":True,
+              "source_equals_reviewed_commit":False,"source_bytes_exported":False},
             "privileged_binding_presence":{
               "FACTORY_WORKERS_ADMIN":"malicious-secret-value",
               "FACTORY_TOKEN_ISSUER":"NOT_LISTED",
@@ -125,6 +129,9 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(r["schema"],"commandcenter.cloudflare.factory_scope_audit_receipt.v1")
         self.assertEqual(r["github_run_id"],"44900012345")
         self.assertEqual(r["factory_execution_flags"]["FACTORY_EXECUTOR_ENABLED"],"0")
+        self.assertEqual(r["factory_script_fingerprint"]["sha256"],"f"*64)
+        self.assertFalse(r["factory_script_fingerprint"]["source_equals_reviewed_commit"])
+        self.assertFalse(r["factory_script_fingerprint"]["source_bytes_exported"])
         self.assertEqual(r["factory_execution_flags"]["FACTORY_STAGE_VERSION_ENABLED"],"0")
         self.assertEqual(r["factory_privileged_bindings"]["FACTORY_WORKERS_ADMIN"],"UNVERIFIED")
         self.assertEqual(r["factory_privileged_bindings"]["FACTORY_SECRET_WRITER"],"PRESENT")
@@ -167,6 +174,80 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(receipt["self_detail_http"],"NOT_ATTEMPTED")
         self.assertFalse(receipt["factory_write_denial_live_proven"])
         self.assertTrue(receipt["manual_scope_review_still_required"])
+
+    def test_deployed_script_raw_fingerprint_is_get_only_and_secret_free(self):
+        data=b"export default {fetch(){return new Response('secret-source-data');}}"
+        calls=[]
+        class Script:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,n):return data[:n]
+        class Opener:
+            def open(self,request,timeout=None):
+                calls.append((request.get_method(),request.full_url))
+                return Script()
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            r=module.factory_script_fingerprint_readback("secret-bearer")
+        self.assertEqual(r["sha256"],hashlib.sha256(data).hexdigest())
+        self.assertEqual(r["byte_length"],len(data))
+        self.assertTrue(r["complete_read"])
+        self.assertEqual(calls,[("GET",module.API+"/accounts/"+module.ACCOUNT+
+                               "/workers/scripts/"+module.WORKER)])
+        self.assertFalse(r["source_equals_reviewed_commit"])
+        self.assertFalse(r["source_bytes_exported"])
+        self.assertNotIn("secret-bearer",str(r))
+        self.assertNotIn("secret-source-data",str(r))
+
+    def test_oversize_script_never_returns_truncated_digest(self):
+        class Big:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,n):return b"x"*n
+        class Opener:
+            def open(self,request,timeout=None):return Big()
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            r=module.factory_script_fingerprint_readback("secret-bearer")
+        self.assertEqual(r["http_status"],200)
+        self.assertIsNone(r["sha256"])
+        self.assertIsNone(r["byte_length"])
+        self.assertFalse(r["complete_read"])
+
+    def test_empty_script_has_no_digest_even_with_http200(self):
+        class Empty:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,n):return b""
+        class Opener:
+            def open(self,request,timeout=None):return Empty()
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            result=module.factory_script_fingerprint_readback("private-bearer")
+        self.assertEqual(result["http_status"],200)
+        self.assertIsNone(result["sha256"])
+        self.assertFalse(result["complete_read"])
+
+    def test_script_get_redirect_is_not_followed_or_hashed(self):
+        class Opener:
+            def open(self,request,timeout=None):
+                raise urllib.error.HTTPError(request.full_url,302,"redirect",
+                                             {"Location":"https://unapproved.example/"},None)
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            result=module.factory_script_fingerprint_readback("private-bearer")
+        self.assertEqual(result["http_status"],302)
+        self.assertIsNone(result["sha256"])
+        self.assertFalse(result["complete_read"])
+
+    def test_script_get_http403_never_promotes_source_identity(self):
+        class Opener:
+            def open(self,request,timeout=None):
+                raise urllib.error.HTTPError(request.full_url,403,"denied",{},None)
+        with patch.object(module.urllib.request,"build_opener",return_value=Opener()):
+            r=module.factory_script_fingerprint_readback("secret-bearer")
+        self.assertEqual(r["http_status"],403)
+        self.assertIsNone(r["sha256"])
+        self.assertFalse(r["source_equals_reviewed_commit"])
 
 if __name__=="__main__":
     unittest.main()
