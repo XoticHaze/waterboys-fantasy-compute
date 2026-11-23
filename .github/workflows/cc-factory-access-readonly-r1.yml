@@ -7,6 +7,10 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/cc-factory-access-readonly-r1.yml'
+      # Reusable GitHub-backed GET-only operator fire path: no Cloudflare writes.
+      # Update an immutable reviewed request marker on main to refresh the
+      # run/SHA-bound sanitized audit without editing workflow source.
+      - 'rendezvous/fire/cc-factory-readonly-r1'
       - 'scripts/cc_factory_access_edge_readonly.py'
       - 'tests/test_cc_factory_access_edge_readonly.py'
       - 'scripts/cc_factory_existing_worker_readonly.py'
