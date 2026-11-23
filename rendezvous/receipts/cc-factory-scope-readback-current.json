@@ -12,11 +12,11 @@
   "factory_execution_flags": {
     "FACTORY_CREATE_ENABLED": "0",
     "FACTORY_EXECUTOR_ENABLED": "0",
-    "FACTORY_INSPECT_ENABLED": "UNVERIFIED",
-    "FACTORY_MACHINE_INSPECT_ENABLED": "UNVERIFIED",
-    "FACTORY_MACHINE_READONLY_ENABLED": "UNVERIFIED",
+    "FACTORY_INSPECT_ENABLED": "0",
+    "FACTORY_MACHINE_INSPECT_ENABLED": "0",
+    "FACTORY_MACHINE_READONLY_ENABLED": "0",
     "FACTORY_SCOPED_TOKEN_ENABLED": "0",
-    "FACTORY_STAGE_VERSION_ENABLED": "UNVERIFIED"
+    "FACTORY_STAGE_VERSION_ENABLED": "0"
   },
   "factory_id_verified": true,
   "factory_privileged_bindings": {
@@ -26,19 +26,19 @@
     "FACTORY_WORKERS_ADMIN": "NOT_LISTED"
   },
   "factory_script_fingerprint": {
-    "byte_length": 20258,
+    "byte_length": 33917,
     "complete_read": true,
     "hash_basis": "CANONICAL_MULTIPART_PARTS_V1",
     "http_status": 200,
     "part_count": 1,
     "response_media_type": "multipart/form-data",
-    "sha256": "0773e4db4dd8d4b382febe351e83e26a5bc4b00c78966a82bd13f9c48e3bea8c",
+    "sha256": "94c36ffc1315f00c31421c11e7f595239168984365d7473d63d9bf466fa81764",
     "source_bytes_exported": false,
     "source_equals_reviewed_commit": false
   },
   "factory_settings_http": 200,
-  "github_head_sha": "e0c563c24abde6290cffa723abca55022548afd4",
-  "github_run_id": "45131451982",
+  "github_head_sha": "a0bf785d00a112de752f71d9beb1f851e21009bb",
+  "github_run_id": "45145533443",
   "legacy_token": {
     "allows_present": null,
     "denies_present": null,
@@ -48,7 +48,7 @@
     "self_verify_http": 200,
     "token_identity_class": "USER_TOKEN"
   },
-  "observed_at_utc": "2026-11-23T07:29:30.741790+00:00",
+  "observed_at_utc": "2026-11-23T09:16:37.363004+00:00",
   "release_or_admin_admitted": false,
   "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
   "scoped_r2_token": {
