@@ -37,8 +37,8 @@
     "source_equals_reviewed_commit": false
   },
   "factory_settings_http": 200,
-  "github_head_sha": "799bc43d1af2eba90d651e8ad03ec55e6fa7dfd6",
-  "github_run_id": "45131361830",
+  "github_head_sha": "e0c563c24abde6290cffa723abca55022548afd4",
+  "github_run_id": "45131451982",
   "legacy_token": {
     "allows_present": null,
     "denies_present": null,
@@ -48,7 +48,7 @@
     "self_verify_http": 200,
     "token_identity_class": "USER_TOKEN"
   },
-  "observed_at_utc": "2026-11-23T07:28:52.833800+00:00",
+  "observed_at_utc": "2026-11-23T07:29:30.741790+00:00",
   "release_or_admin_admitted": false,
   "schema": "commandcenter.cloudflare.factory_scope_audit_receipt.v1",
   "scoped_r2_token": {
