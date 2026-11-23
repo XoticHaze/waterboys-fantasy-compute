@@ -138,7 +138,8 @@ jobs:
               raise SystemExit('READBACK_FALSE_SOURCE_VERIFICATION')
           fp=doc['factory_script_fingerprint']
           if set(fp)!={'http_status','sha256','byte_length','complete_read',
-                      'source_equals_reviewed_commit','source_bytes_exported'}:
+                      'source_equals_reviewed_commit','source_bytes_exported',
+                      'hash_basis','response_media_type','part_count'}:
               raise SystemExit('READBACK_FINGERPRINT_FIELDS_INVALID')
           if fp['source_equals_reviewed_commit'] is not False or fp['source_bytes_exported'] is not False:
               raise SystemExit('READBACK_SOURCE_CONTENT_OR_OVERCLAIM_DENIED')
@@ -146,9 +147,22 @@ jobs:
               if fp['http_status']!=200 or not re.fullmatch(r'[a-f0-9]{64}',str(fp['sha256'])) or (
                       not isinstance(fp['byte_length'],int) or not 1<=fp['byte_length']<=1048576):
                   raise SystemExit('READBACK_FINGERPRINT_INVALID')
+              if fp['hash_basis']=='CANONICAL_MULTIPART_PARTS_V1':
+                  if fp['response_media_type'] not in ('multipart/form-data','multipart/mixed','multipart/related') or (
+                          not isinstance(fp['part_count'],int) or not 1<=fp['part_count']<=50):
+                      raise SystemExit('READBACK_CANONICAL_MULTIPART_INVALID')
+              elif fp['hash_basis']=='RAW_HTTP_BODY_UNVERIFIED_STABILITY':
+                  if fp['part_count'] is not None or fp['response_media_type'] not in (
+                          'UNVERIFIED','application/javascript','application/octet-stream',
+                          'text/javascript','text/plain'):
+                      raise SystemExit('READBACK_RAW_UNSTABLE_CLASS_INVALID')
+              else:
+                  raise SystemExit('READBACK_UNKNOWN_FINGERPRINT_BASIS')
           elif fp['complete_read'] is False:
               if fp['sha256'] is not None or fp['byte_length'] is not None or fp['http_status'] not in (
-                      'NOT_VERIFIED','UNAVAILABLE',200,401,403,404,413,429,500,502,503):
+                      'NOT_VERIFIED','UNAVAILABLE',200,401,403,404,413,429,500,502,503) or (
+                      fp['hash_basis']!='NOT_VERIFIED' or fp['response_media_type']!='UNVERIFIED' or
+                      fp['part_count'] is not None):
                   raise SystemExit('READBACK_FINGERPRINT_UNVERIFIED')
           else:
               raise SystemExit('READBACK_FINGERPRINT_BOOLEAN_INVALID')
