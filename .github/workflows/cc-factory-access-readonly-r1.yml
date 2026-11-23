@@ -42,6 +42,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_cc_factory_access_edge_readonly.py' -v
           python -m unittest discover -s tests -p 'test_cc_factory_legacy_token_scope_readonly.py' -v
           python -m py_compile scripts/cc_factory_existing_worker_readonly.py
+          python -m unittest discover -s tests -p 'test_cc_factory_stage_version_readonly.py' -v
+          python -m py_compile scripts/cc_factory_stage_version_readonly.py
           python -m unittest discover -s tests -p 'test_cloudflare_r2_scope_preflight.py' -v
           python -m py_compile scripts/cloudflare_r2_scope_preflight.py
       # When the preexisting narrow R2 secret is enrolled, require the complete
@@ -67,11 +69,18 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/cc_factory_existing_worker_readonly.py
+      - name: GET-only new factory version and frozen active deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cc_factory_stage_version_readonly.py
       - name: Export scrubbed read-only evidence, no API token values
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cc-factory-sanitized-readback
-          path: cc-factory-readback.json
+          path: |
+            cc-factory-readback.json
+            cc-factory-stage-version-readback.json
           if-no-files-found: error
           retention-days: 7
 
@@ -216,5 +225,74 @@ jobs:
             echo "READBACK_NEW_IMMUTABLE_RECEIPT_MISSING"; exit 1;
           }
           git commit -m 'audit: persist scoped Cloudflare factory credential readback'
+          git push origin HEAD:main
+
+- name: Persist bounded off-traffic version observation
+        shell: bash
+        env:
+          CC_STAGE_SOURCE: ${{ runner.temp }}/cc-factory-sanitized/cc-factory-stage-version-readback.json
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          doc=json.loads(Path(os.environ['CC_STAGE_SOURCE']).read_text(encoding='utf-8'))
+          fields={'schema','github_run_id','github_head_sha','observed_at_utc',
+            'account_role','worker','versions_http','deployments_http',
+            'newest_version_id','newest_version_created_at','newest_version_source',
+            'full_traffic_version_id','active_deployment_id',
+            'active_baseline_unchanged','newest_version_offtraffic_observed',
+            'owner_reported_public_source_commit',
+            'source_matches_reviewed_git_commit_attested','factory_admin_admitted',
+            'no_mac_publisher_admitted','cloudflare_mutations',
+            'credential_values_exported','classification'}
+          if set(doc)!=fields or doc['schema']!='commandcenter.cloudflare.factory_offtraffic_version_readonly.v1':
+              raise SystemExit('FACTORY_STAGE_RECEIPT_SCHEMA_DENIED')
+          if doc['github_run_id']!=os.environ['GITHUB_RUN_ID'] or not re.fullmatch(r'[0-9]{5,20}',doc['github_run_id']):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_RUN_DENIED')
+          if doc['github_head_sha']!=os.environ['GITHUB_SHA'] or not re.fullmatch(r'[a-f0-9]{40}',doc['github_head_sha']):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_HEAD_DENIED')
+          if (doc['worker']!='shared-compute-worker-factory' or
+              doc['account_role']!='ORIGINAL_SLENDERIQ' or
+              doc['owner_reported_public_source_commit']!='97c3e7d2c948f802f4cb89017cd7164979176001'):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_TARGET_DENIED')
+          if any(doc[k] is not False for k in ('source_matches_reviewed_git_commit_attested',
+             'factory_admin_admitted','no_mac_publisher_admitted',
+             'credential_values_exported')) or doc['cloudflare_mutations']!=0:
+              raise SystemExit('FACTORY_STAGE_RECEIPT_FALSE_ADMISSION_DENIED')
+          if doc['versions_http'] not in (200,401,403,404,429,'UNAVAILABLE') or (
+             doc['deployments_http'] not in (200,401,403,404,429,'UNAVAILABLE')):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_HTTP_DENIED')
+          uuid=r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
+          for key in ('newest_version_id','active_deployment_id','full_traffic_version_id'):
+              if doc[key] is not None and not re.fullmatch(uuid,doc[key]):
+                  raise SystemExit('FACTORY_STAGE_RECEIPT_UUID_DENIED')
+          dt=doc['newest_version_created_at']
+          if dt is not None and not re.fullmatch(r'20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z',dt):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_TIME_DENIED')
+          if doc['newest_version_source'] not in ('wrangler','api','unknown','dash','integration','UNVERIFIED'):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_SOURCE_DENIED')
+          if type(doc['active_baseline_unchanged']) is not bool or type(doc['newest_version_offtraffic_observed']) is not bool:
+              raise SystemExit('FACTORY_STAGE_RECEIPT_BOOL_DENIED')
+          observed=doc['newest_version_offtraffic_observed']
+          wanted='STAGED_OFFTRAFFIC_VERSION_INDEPENDENTLY_OBSERVED' if observed else 'OFFTRAFFIC_VERSION_UNVERIFIED_NO_RELEASE'
+          if doc['classification']!=wanted:
+              raise SystemExit('FACTORY_STAGE_RECEIPT_CLASS_DENIED')
+          if observed and (not doc['active_baseline_unchanged'] or
+             doc['versions_http']!=200 or doc['deployments_http']!=200 or
+             doc['newest_version_id']==doc['full_traffic_version_id'] or
+             not str(dt).startswith('2026-11-23T')):
+              raise SystemExit('FACTORY_STAGE_RECEIPT_ASSERTION_DENIED')
+          output=Path('rendezvous/receipts')/('cc-factory-stage-version-readback-'+doc['github_run_id']+'.json')
+          output.parent.mkdir(parents=True,exist_ok=True)
+          if output.exists(): raise SystemExit('FACTORY_STAGE_RECEIPT_REPLAY_DENIED')
+          output.write_text(json.dumps(doc,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+          print('FACTORY_STAGE_VERSION_RECEIPT='+wanted)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add rendezvous/receipts/cc-factory-stage-version-readback-*.json
+          git diff --cached --quiet && { echo 'FACTORY_STAGE_NO_NEW_RECEIPT'; exit 1; }
+          git commit -m 'audit: independently observe factory off-traffic version'
           git push origin HEAD:main
 
