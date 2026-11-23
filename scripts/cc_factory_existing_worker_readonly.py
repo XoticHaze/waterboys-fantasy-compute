@@ -12,7 +12,11 @@ API = "https://api.cloudflare.com/client/v4"
 FLAGS = (
     "FACTORY_EXECUTOR_ENABLED",
     "FACTORY_CREATE_ENABLED",
+    "FACTORY_INSPECT_ENABLED",
     "FACTORY_SCOPED_TOKEN_ENABLED",
+    "FACTORY_STAGE_VERSION_ENABLED",
+    "FACTORY_MACHINE_READONLY_ENABLED",
+    "FACTORY_MACHINE_INSPECT_ENABLED",
 )
 PRIVILEGED = (
     "FACTORY_WORKERS_ADMIN",
@@ -286,6 +290,7 @@ def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
     legacy = receipt.get("existing_legacy_token_scope_metadata") or {}
     scoped = receipt.get("existing_scoped_deploy_comparison") or {}
     flags = receipt.get("activation_flags") or {}
+    privileged = receipt.get("privileged_binding_presence") or {}
     def values(data, names):
         return {k: data.get(k) for k in names}
     return {
@@ -301,9 +306,13 @@ def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
         "access_app_present": bool(
             (receipt.get("protected_access_application_readback") or {}).get(
                 "existing_app_confirmed")),
-        "factory_execution_flags": values(flags, (
-            "FACTORY_EXECUTOR_ENABLED", "FACTORY_CREATE_ENABLED",
-            "FACTORY_SCOPED_TOKEN_ENABLED")),
+        "factory_execution_flags": {
+            k: flags.get(k) if flags.get(k) in ("0", "1", "UNVERIFIED")
+            else "UNVERIFIED" for k in FLAGS},
+        "factory_privileged_bindings": {
+            k: privileged.get(k) if privileged.get(k) in (
+                "PRESENT", "NOT_LISTED", "UNVERIFIED")
+            else "UNVERIFIED" for k in PRIVILEGED},
         "legacy_token": values(legacy, (
             "token_identity_class", "self_verify_http", "self_detail_http",
             "policy_shape", "policy_entry_count", "allows_present", "denies_present")),
@@ -336,7 +345,9 @@ def main() -> int:
     flags = {k: by_name.get(k, {}).get("text") if
              by_name.get(k, {}).get("text") in ("0", "1") else "UNVERIFIED"
              for k in FLAGS}
-    privileged = {k: ("PRESENT" if k in by_name else "NOT_LISTED")
+    # A failed settings read proves neither presence nor absence.
+    privileged = {k: ("UNVERIFIED" if settings_status != 200 else
+                      "PRESENT" if k in by_name else "NOT_LISTED")
                   for k in PRIVILEGED}
     dep_status, dep_doc = read(token, f"/accounts/{ACCOUNT}/workers/scripts/{WORKER}/deployments")
     deps = dep_doc.get("result") if dep_doc.get("success") is True else None

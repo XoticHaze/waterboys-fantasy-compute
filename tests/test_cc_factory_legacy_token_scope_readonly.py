@@ -104,7 +104,15 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
             "protected_access_application_readback":{"existing_app_confirmed":True,
                  "aud":"secret-owner-aud"},
             "activation_flags":{"FACTORY_EXECUTOR_ENABLED":"0",
-              "FACTORY_CREATE_ENABLED":"0","FACTORY_SCOPED_TOKEN_ENABLED":"0"},
+              "FACTORY_CREATE_ENABLED":"0","FACTORY_SCOPED_TOKEN_ENABLED":"0",
+              "FACTORY_INSPECT_ENABLED":"0","FACTORY_STAGE_VERSION_ENABLED":"0",
+              "FACTORY_MACHINE_READONLY_ENABLED":"0",
+              "FACTORY_MACHINE_INSPECT_ENABLED":"0"},
+            "privileged_binding_presence":{
+              "FACTORY_WORKERS_ADMIN":"malicious-secret-value",
+              "FACTORY_TOKEN_ISSUER":"NOT_LISTED",
+              "FACTORY_SECRET_WRITER":"PRESENT",
+              "FACTORY_QUEUE_GITHUB_TOKEN":"NOT_LISTED"},
             "existing_legacy_token_scope_metadata":{"token_identity_class":"USER_TOKEN",
               "self_verify_http":200,"self_detail_http":403,
               "policy_shape":"UNAVAILABLE", "token":"secret-value",
@@ -117,11 +125,16 @@ class ExistingLegacyTokenScopeTests(unittest.TestCase):
         self.assertEqual(r["schema"],"commandcenter.cloudflare.factory_scope_audit_receipt.v1")
         self.assertEqual(r["github_run_id"],"44900012345")
         self.assertEqual(r["factory_execution_flags"]["FACTORY_EXECUTOR_ENABLED"],"0")
+        self.assertEqual(r["factory_execution_flags"]["FACTORY_STAGE_VERSION_ENABLED"],"0")
+        self.assertEqual(r["factory_privileged_bindings"]["FACTORY_WORKERS_ADMIN"],"UNVERIFIED")
+        self.assertEqual(r["factory_privileged_bindings"]["FACTORY_SECRET_WRITER"],"PRESENT")
+        self.assertEqual(set(r["factory_execution_flags"]),set(module.FLAGS))
+        self.assertEqual(set(r["factory_privileged_bindings"]),set(module.PRIVILEGED))
         self.assertFalse(r["write_denial_proven"])
         self.assertEqual(r["cloudflare_mutations"],0)
         clean=json.dumps(r)
         for private in ["secret-value","sensitive@example.com","secret-owner-aud",
-                        "scope-secret","a"*32]:
+                        "scope-secret","a"*32,"malicious-secret-value"]:
             self.assertNotIn(private,clean)
         with self.assertRaises(ValueError):
             module.public_audit_report(receipt,"not-numeric","f"*40)

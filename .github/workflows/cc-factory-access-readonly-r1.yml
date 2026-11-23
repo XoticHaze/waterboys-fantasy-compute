@@ -98,7 +98,8 @@ jobs:
           keys={'schema','github_run_id','github_head_sha','observed_at_utc',
                 'factory_deployment_identity',
                 'source_role','factory_settings_http','factory_id_verified',
-                'access_app_present','factory_execution_flags','legacy_token',
+                'access_app_present','factory_execution_flags',
+                'factory_privileged_bindings','legacy_token',
                 'scoped_r2_token','cloudflare_mutations','credential_values_exported',
                 'write_denial_proven','release_or_admin_admitted','classification'}
           if set(doc)!=keys: raise SystemExit('READBACK_UNEXPECTED_FIELD_DENIED')
@@ -133,9 +134,18 @@ jobs:
               raise SystemExit('READBACK_FALSE_SOURCE_VERIFICATION')
           flags=doc['factory_execution_flags']
           if set(flags)!={'FACTORY_EXECUTOR_ENABLED','FACTORY_CREATE_ENABLED',
-                          'FACTORY_SCOPED_TOKEN_ENABLED'} or not all(
+                          'FACTORY_INSPECT_ENABLED','FACTORY_SCOPED_TOKEN_ENABLED',
+                          'FACTORY_STAGE_VERSION_ENABLED',
+                          'FACTORY_MACHINE_READONLY_ENABLED',
+                          'FACTORY_MACHINE_INSPECT_ENABLED'} or not all(
                           x in ('0','1','UNVERIFIED') for x in flags.values()):
               raise SystemExit('READBACK_FLAGS_UNEXPECTED')
+          bindings=doc['factory_privileged_bindings']
+          if set(bindings)!={'FACTORY_WORKERS_ADMIN','FACTORY_TOKEN_ISSUER',
+                             'FACTORY_SECRET_WRITER','FACTORY_QUEUE_GITHUB_TOKEN'} or not all(
+                             x in ('PRESENT','NOT_LISTED','UNVERIFIED')
+                             for x in bindings.values()):
+              raise SystemExit('READBACK_BINDINGS_UNEXPECTED')
           legacy=doc['legacy_token']
           if set(legacy)!={'token_identity_class','self_verify_http','self_detail_http',
               'policy_shape','policy_entry_count','allows_present','denies_present'}:
