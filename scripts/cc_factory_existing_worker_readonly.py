@@ -223,11 +223,57 @@ def access_app_status(token: str) -> dict:
             "account_id_output": False, "aud_or_identity_exported": False}
 
 
+def canonical_multipart_fingerprint(raw: bytes, content_type: str):
+    """Stable digest of named MIME payloads, independent of random HTTP boundaries.
+
+    Module filenames and source remain private. Only the final digest/count
+    leave this credential-bearing function. Reject nested/invalid multipart.
+    """
+    from email import policy
+    from email.parser import BytesParser
+    if not isinstance(content_type, str) or len(content_type)>256 or (
+            "\r" in content_type or "\n" in content_type):
+        return None
+    media=content_type.split(";",1)[0].strip().lower()
+    if media not in ("multipart/form-data","multipart/mixed","multipart/related"):
+        return None
+    try:
+        root=BytesParser(policy=policy.default).parsebytes(
+            ("MIME-Version: 1.0\r\nContent-Type: "+content_type+
+             "\r\n\r\n").encode("ascii")+raw)
+        if not root.is_multipart():
+            return None
+        parts=list(root.iter_parts())
+        if not 1<=len(parts)<=50:
+            return None
+        descriptors=[]
+        for part in parts:
+            if part.is_multipart():
+                return None
+            payload=part.get_payload(decode=True)
+            name=part.get_param("name",header="content-disposition") or ""
+            filename=part.get_filename() or ""
+            kind=part.get_content_type()
+            if not isinstance(payload,bytes) or not all(
+                    isinstance(x,str) and len(x)<=200 and x.isascii()
+                    for x in (name,filename,kind)):
+                return None
+            descriptors.append((name,filename,kind,len(payload),
+                                hashlib.sha256(payload).hexdigest()))
+        canonical=json.dumps(sorted(descriptors),separators=(",",":"),
+                             ensure_ascii=True).encode("ascii")
+        return hashlib.sha256(canonical).hexdigest(),len(parts),media
+    except (ValueError,UnicodeError,TypeError,AttributeError):
+        return None
+
+
 def factory_script_fingerprint_readback(token: str) -> dict:
     """GET-only bounded raw script hash, never export source or bearer."""
     result={"http_status":"NOT_VERIFIED","sha256":None,"byte_length":None,
             "complete_read":False,"source_equals_reviewed_commit":False,
-            "source_bytes_exported":False}
+            "source_bytes_exported":False,
+            "hash_basis":"NOT_VERIFIED","response_media_type":"UNVERIFIED",
+            "part_count":None}
     if not token:return result
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self,req,fp,code,msg,headers,newurl):
@@ -240,6 +286,7 @@ def factory_script_fingerprint_readback(token: str) -> dict:
     try:
         with opener.open(req,timeout=16) as resp:
             status=resp.status
+            media_header=str(getattr(resp,"headers",{}).get("Content-Type",""))
             raw=resp.read(1048577)
     except urllib.error.HTTPError as exc:
         result["http_status"]=exc.code
@@ -248,8 +295,25 @@ def factory_script_fingerprint_readback(token: str) -> dict:
         return result
     result["http_status"]=status
     if status!=200 or not raw or len(raw)>1048576:return result
+    media=media_header.split(";",1)[0].strip().lower()
+    if media.startswith("multipart/"):
+        canonical=canonical_multipart_fingerprint(raw,media_header)
+        if canonical is None:
+            return result
+        digest,count,kind=canonical
+        result.update(sha256=digest,byte_length=len(raw),complete_read=True,
+                      hash_basis="CANONICAL_MULTIPART_PARTS_V1",
+                      response_media_type=kind,part_count=count)
+        return result
+    # Non-multipart transport bytes are useful for comparison, but alone
+    # do not prove a stable or GitHub-reviewed source identity.
+    if media not in ("application/octet-stream","application/javascript",
+                     "text/javascript","text/plain"):
+        media="UNVERIFIED"
     result.update(sha256=hashlib.sha256(raw).hexdigest(),
-                  byte_length=len(raw),complete_read=True)
+                  byte_length=len(raw),complete_read=True,
+                  hash_basis="RAW_HTTP_BODY_UNVERIFIED_STABILITY",
+                  response_media_type=media,part_count=None)
     return result
 
 
@@ -341,6 +405,12 @@ def public_audit_report(receipt: dict, run_id: str, head_sha: str) -> dict:
             "complete_read": bool((receipt.get("factory_script_fingerprint") or {}).get("complete_read")),
             "source_equals_reviewed_commit": False,
             "source_bytes_exported": False,
+            "hash_basis": (receipt.get("factory_script_fingerprint") or {}).get(
+                "hash_basis","NOT_VERIFIED"),
+            "response_media_type": (receipt.get("factory_script_fingerprint") or {}).get(
+                "response_media_type","UNVERIFIED"),
+            "part_count": (receipt.get("factory_script_fingerprint") or {}).get(
+                "part_count"),
         },
         "access_app_present": bool(
             (receipt.get("protected_access_application_readback") or {}).get(
