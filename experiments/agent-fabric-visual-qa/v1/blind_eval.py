@@ -104,6 +104,13 @@ def score(gold_raw: bytes, response: dict) -> dict:
             raise ValueError("invalid rationale")
         if row["bbox_px"] is not None and not _box_valid(row["bbox_px"]):
             raise ValueError("invalid bounding box")
+        actual = row["supported_value"]
+        if isinstance(actual, str):
+            _norm(actual)
+        elif actual is not None and type(actual) is not bool and (type(actual) is not int or abs(actual) > 1000000):
+            raise ValueError("invalid supported value shape")
+        # Legacy offline bool answers are scored wrong by exact type below;
+        # the live transport rejects bool as a malformed count.
         by_card[card] = row
     boxes = {x["card"]: x["bbox_px"] for x in gold["expected_findings"]}
     details = []
@@ -114,7 +121,8 @@ def score(gold_raw: bytes, response: dict) -> dict:
                   row["bbox_px"] is not None and _overlap(row["bbox_px"], boxes[card]) >= 0.25)
         checks = {"classification": row["classification"] == c,
                   "display": _norm(row["display_value"]) == displayed,
-                  "supported": (_norm(row["supported_value"]) == supported
+                  "supported": (isinstance(row["supported_value"], str)
+                                and _norm(row["supported_value"]) == supported
                                 if isinstance(supported, str)
                                 else type(row["supported_value"]) is type(supported)
                                 and row["supported_value"] == supported),
