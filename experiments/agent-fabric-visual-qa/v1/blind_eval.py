@@ -107,8 +107,10 @@ def score(gold_raw: bytes, response: dict) -> dict:
         actual = row["supported_value"]
         if isinstance(actual, str):
             _norm(actual)
-        elif actual is not None and (type(actual) is not int or abs(actual) > 1000000):
+        elif actual is not None and type(actual) is not bool and (type(actual) is not int or abs(actual) > 1000000):
             raise ValueError("invalid supported value shape")
+        # Legacy offline bool answers are scored wrong by exact type below;
+        # the live transport rejects bool as a malformed count.
         by_card[card] = row
     boxes = {x["card"]: x["bbox_px"] for x in gold["expected_findings"]}
     details = []
