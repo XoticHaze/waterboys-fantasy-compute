@@ -1,11 +1,11 @@
-name: NVIDIA Fictional Evidence Status Bound Source Release (owner-reviewed exact source)
+name: NVIDIA V2 Evidence Status Bound Source Release (owner-reviewed exact source)
 # Existing private Worker only. Public-fictional paired-feedback source pinned; no models, keys or new routes.
 # Strictly separate source release from later private Service Binding inference qualification.
 # The Store ID comes from authenticated Worker binding readback, never chat/CI logs.
 on:
   push:
     branches: [main]
-    paths: ['ops/nvidia_evidence_status_bound_release_trigger.txt']
+    paths: ['ops/nvidia_evidence_status_v2_bound_release_trigger.txt']
 permissions:
   contents: read
 concurrency:
@@ -30,7 +30,7 @@ jobs:
           sha=os.environ.get("GITHUB_SHA","")
           if not re.fullmatch(r"[a-f0-9]{40}",sha):
               raise SystemExit("UNTRUSTED_CONTROLLER_REVISION")
-          path="ops/nvidia_evidence_status_bound_release_trigger.txt"
+          path="ops/nvidia_evidence_status_v2_bound_release_trigger.txt"
           url="https://api.github.com/repos/XoticHaze/waterboys-fantasy-compute/contents/"+path+"?ref="+sha
           token=os.environ.get("GITHUB_API_READ_TOKEN","")
           if not isinstance(token,str) or len(token)<10:
@@ -48,9 +48,9 @@ jobs:
               if k in fields:raise SystemExit("DUPLICATED_RELEASE_REQUEST_FIELD")
               fields[k]=v
           expected={
-           "reviewed_public_source_sha":"bccfa9ef96709942c31f2ed5c1ec39aeccfa1669",
-           "reviewed_public_source_ci_run":"44903872423",
-           "approval_scope":"existing_private_synthetic_evidence_status_revision_only",
+           "reviewed_public_source_sha":"7ff97c4982b32cf08900dea000dd269a1f9d8ff1",
+           "reviewed_public_source_ci_run":"44908667629",
+           "approval_scope":"existing_private_synthetic_evidence_status_v2_revision_only",
            "existing_worker":"cc-shared-nvidia-inference",
            "preserve_bound_NVIDIA_API_KEY_secrets_store_reference":"true",
            "preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED":"0",
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: bccfa9ef96709942c31f2ed5c1ec39aeccfa1669
+          ref: 7ff97c4982b32cf08900dea000dd269a1f9d8ff1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -76,7 +76,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "bccfa9ef96709942c31f2ed5c1ec39aeccfa1669"
+          test "$(git rev-parse HEAD)" = "7ff97c4982b32cf08900dea000dd269a1f9d8ff1"
           npm test
           node --check src/index.js
           node --check src/provider_pacing_queue.js
@@ -99,6 +99,7 @@ jobs:
           node --check local-probe/src/feedback_receipt.js
           node --check local-probe/src/feedback_summary.js
           node --check src/evidence_status_loop.js
+          node --check src/evidence_status_feedback_v2.js
           node --check local-probe/src/evidence_status_caller.js
       - name: Materialize ephemeral bound manifest from Cloudflare trusted readback
         working-directory: cloudflare/shared-nvidia-inference
@@ -204,13 +205,21 @@ jobs:
               raise SystemExit('WORKER_ACTIVE_VERSION_ID_INVALID')
           if created>datetime.now(timezone.utc):
               raise SystemExit('WORKER_DEPLOYMENT_TIME_IN_FUTURE')
+          # The deploy tool must identify the same version as the authenticated
+          # control-plane readback. Do not bless an unrelated concurrent release.
+          deploy_log=Path(os.environ["RUNNER_TEMP"],"nvidia-bound-redeploy.log").read_text(encoding="utf-8")
+          reported=re.findall(r"(?im)^\s*Current Version ID:\s*([a-f0-9-]{36})\s*$",deploy_log)
+          if len(reported)!=1 or str(uuid.UUID(reported[0]))!=version_id:
+              raise SystemExit("DEPLOY_TOOL_VERSION_READBACK_MISMATCH")
+
           proof={
-              "schema":"commandcenter.nvidia_evidence_status_public_synthetic_release_version.v1",
+              "schema":"commandcenter.nvidia_evidence_status_public_synthetic_release_version.v2",
               "repository":os.environ["GITHUB_REPOSITORY"],"run_id":os.environ["GITHUB_RUN_ID"],
               "controller_sha":os.environ["GITHUB_SHA"],
-              "reviewed_source_sha":"bccfa9ef96709942c31f2ed5c1ec39aeccfa1669",
+              "reviewed_source_sha":"7ff97c4982b32cf08900dea000dd269a1f9d8ff1",
               "worker_name":"cc-shared-nvidia-inference",
               "deployment_id":deployment_id,"version_id":version_id,
+              "deploy_tool_version_verified":True,
               "deployment_created_on":active["created_on"],
               "diagnostic_disabled":True,"secret_reference_preserved":True,
               "full_model_text_exported":False,"private_input_used":False,
