@@ -189,7 +189,7 @@ jobs:
           print("NVIDIA_EVIDENCE_STATUS_CAPTURED="+a["outcome"])
           PY
       - name: Always restore disabled diagnostics and original Secrets Store binding
-        if: ${{ always() && steps.gate_enable.outcome != 'skipped' }}
+        if: ${{ always() && (steps.gate_enable.outcome == 'success' || steps.gate_enable.outcome == 'failure' || steps.gate_enable.outcome == 'cancelled') }}
         shell: bash
         working-directory: controller
         run: |
