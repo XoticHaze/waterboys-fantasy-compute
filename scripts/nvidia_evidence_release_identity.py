@@ -45,7 +45,7 @@ def verify_release_identity(proof, active, *, run_id, controller_sha):
     expected = {
         "schema": SCHEMA, "repository": REPO, "run_id": str(run_id),
         "controller_sha": controller_sha, "reviewed_source_sha": SOURCE,
-        "worker_name": WORKER, "diagnostic_disabled": True,
+        "worker_name": WORKER, "deploy_tool_version_verified": True, "diagnostic_disabled": True,
         "secret_reference_preserved": True, "full_model_text_exported": False,
         "private_input_used": False, "production_admitted": False,
     }
