@@ -21,7 +21,7 @@ def fixtures():
     proof = {"schema": SCHEMA, "repository": REPO, "run_id": RUN,
              "controller_sha": SHA, "reviewed_source_sha": SOURCE,
              "worker_name": WORKER, "deployment_id": DEPLOY, "version_id": VERSION,
-             "deployment_created_on": TIME, "diagnostic_disabled": True,
+             "deployment_created_on": TIME, "deploy_tool_version_verified": True, "diagnostic_disabled": True,
              "secret_reference_preserved": True, "full_model_text_exported": False,
              "private_input_used": False, "production_admitted": False}
     active = {"id": DEPLOY, "created_on": TIME,
@@ -59,7 +59,7 @@ class ExactReleaseTests(unittest.TestCase):
         p, a = fixtures()
         for field, invalid in (("run_id", "22222222222"), ("controller_sha", "b"*40),
                                ("reviewed_source_sha", "b"*40), ("worker_name", "other"),
-                               ("diagnostic_disabled", False), ("production_admitted", True),
+                               ("deploy_tool_version_verified", False), ("diagnostic_disabled", False), ("production_admitted", True),
                                ("private_input_used", True), ("secret_reference_preserved", False)):
             with self.subTest(field=field):
                 bad = copy.deepcopy(p)
