@@ -1,10 +1,10 @@
-name: NVIDIA Fixed Fictional Evidence Status Live Revision (Private Bound Worker)
+name: NVIDIA V2 Fictional Evidence Status Live Revision (Private Bound Worker)
 # Candidate-only until owner-approved deployment of the exact pinned source.
 # No arbitrary prompts, real private inputs, model prose or protected actions.
 on:
   push:
     branches: [main]
-    paths: ['ops/nvidia_evidence_status_live_trigger.txt']
+    paths: ['ops/nvidia_evidence_status_v2_live_trigger.txt']
 permissions:
   contents: read
   actions: read
@@ -19,7 +19,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       GITHUB_API_READ_TOKEN: ${{ github.token }}
-      EVIDENCE_STATUS_SOURCE_SHA: bccfa9ef96709942c31f2ed5c1ec39aeccfa1669
+      NVIDIA_EVIDENCE_FEEDBACK_PROTOCOL: v2
+      EVIDENCE_STATUS_SOURCE_SHA: 7ff97c4982b32cf08900dea000dd269a1f9d8ff1
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -27,7 +28,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: XoticHaze/research-compute-public-
-          ref: bccfa9ef96709942c31f2ed5c1ec39aeccfa1669
+          ref: 7ff97c4982b32cf08900dea000dd269a1f9d8ff1
           path: reviewed-source
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -37,20 +38,21 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_RUN_ATTEMPT" = "1"
-          test "$(git -C reviewed-source rev-parse HEAD)" = "bccfa9ef96709942c31f2ed5c1ec39aeccfa1669"
-          python - <<'PY'
+          test "$(git -C reviewed-source rev-parse HEAD)" = "7ff97c4982b32cf08900dea000dd269a1f9d8ff1"
+          PYTHONPATH=controller/scripts python - <<'PY'
           import os,re,json,base64
+          from nvidia_evidence_release_identity import fetch_release_proof,verify_release_identity
           from pathlib import Path
           from urllib.request import Request,urlopen
-          sha="bccfa9ef96709942c31f2ed5c1ec39aeccfa1669"
+          sha="7ff97c4982b32cf08900dea000dd269a1f9d8ff1"
           cfg=json.loads(Path("reviewed-source/cloudflare/shared-nvidia-inference/wrangler.jsonc").read_text())
           if not (cfg.get("name")=="cc-shared-nvidia-inference" and
                   cfg.get("workers_dev") is False and cfg.get("preview_urls") is False and
                   cfg.get("vars",{}).get("CC_NVIDIA_DIAGNOSTIC_ENABLED")=="0" and
                   "route" not in cfg and "routes" not in cfg and "secrets_store_secrets" not in cfg):
               raise SystemExit("V4_PRIVATE_WORKER_CONFIG_INVALID")
-          raw=Path("controller/ops/nvidia_evidence_status_live_trigger.txt").read_text().strip()
-          expr=r"evidence=live;source="+sha+r";release_run=([0-9]{8,20});release_sha=([a-f0-9]{40});nonce=([A-Za-z0-9_-]{12,64})"
+          raw=Path("controller/ops/nvidia_evidence_status_v2_live_trigger.txt").read_text().strip()
+          expr=r"evidence=v2-live;source="+sha+r";release_run=([0-9]{8,20});release_sha=([a-f0-9]{40});nonce=([A-Za-z0-9_-]{12,64})"
           match=re.fullmatch(expr,raw)
           if match is None:raise SystemExit("V4_FIXED_SYNTHETIC_SELECTOR_REQUIRED")
           release_run,release_sha,_=match.groups()
@@ -64,20 +66,26 @@ jobs:
           if not (run.get("id")==int(release_run) and run.get("head_sha")==release_sha
              and run.get("status")=="completed" and run.get("conclusion")=="success"
              and run.get("event")=="push" and run.get("run_attempt")==1 and
-             str(run.get("path","")).startswith(".github/workflows/nvidia-evidence-status-bound-release-r1.yml")):
+             str(run.get("path",""))==".github/workflows/nvidia-evidence-status-bound-release-r1.yml"):
               raise SystemExit("V4_OWNER_DEPLOYMENT_NOT_VERIFIED")
           m=github("https://api.github.com/repos/"+repo+
-              "/contents/ops/nvidia_evidence_status_bound_release_trigger.txt?ref="+release_sha)
+              "/contents/ops/nvidia_evidence_status_v2_bound_release_trigger.txt?ref="+release_sha)
           body=base64.b64decode(m.get("content","")).decode("utf-8")
-          if "reviewed_public_source_sha="+sha not in body or (
-             "approval_scope=existing_private_synthetic_evidence_status_revision_only" not in body):
+          fields={}
+          for line in body.splitlines():
+              if '=' not in line:continue
+              k,v=line.split('=',1)
+              if k in fields:raise SystemExit('DUPLICATE_RELEASE_FIELD')
+              fields[k]=v
+          if (fields.get('reviewed_public_source_sha')!=sha or
+              fields.get('approval_scope')!='existing_private_synthetic_evidence_status_v2_revision_only'):
               raise SystemExit("V4_DEPLOYMENT_SCOPE_MISMATCH")
           # The referenced successful release must have executed the exact
           # V4-pinned reviewed deploy workflow, not a historical V3 workflow.
           w=github("https://api.github.com/repos/"+repo+
               "/contents/.github/workflows/nvidia-evidence-status-bound-release-r1.yml?ref="+release_sha)
           workflow=base64.b64decode(w.get("content","")).decode("utf-8")
-          if not ("ref: bccfa9ef96709942c31f2ed5c1ec39aeccfa1669" in workflow and
+          if not ("ref: 7ff97c4982b32cf08900dea000dd269a1f9d8ff1" in workflow and
               "EXACT_REVIEWED_EVIDENCE_STATUS_RELEASE_MANIFEST=PASS" in workflow and
               "flag.get('text')!='0'" in workflow):
               raise SystemExit("V4_RELEASE_WORKFLOW_SOURCE_NOT_VERIFIED")
@@ -117,6 +125,9 @@ jobs:
           finished=utc(run.get("updated_at"))
           if not (start<=created<=finished+timedelta(seconds=90)):
               raise SystemExit("V4_ACTIVE_VERSION_NOT_FROM_REVIEWED_RELEASE")
+          proof=fetch_release_proof(release_run,os.environ['GITHUB_API_READ_TOKEN'])
+          verify_release_identity(proof,active,run_id=release_run,controller_sha=release_sha)
+          print("V2_EXACT_RELEASE_ARTIFACT_AND_ACTIVE_VERSION_VERIFIED=PASS")
           print("V4_ACTIVE_DEPLOYMENT_VERSION_VERIFIED=PASS")
           print("V4_ACTIVE_VERSION_ID="+current_version)
           print("V4_ACTIVE_DEPLOYMENT_ID="+deployment_id)
@@ -127,8 +138,10 @@ jobs:
           node --check reviewed-source/cloudflare/shared-nvidia-inference/src/micro_feedback_runner.js
           node --check reviewed-source/cloudflare/shared-nvidia-inference/local-probe/src/feedback_caller.js
           node --check reviewed-source/cloudflare/shared-nvidia-inference/src/evidence_status_loop.js
+          node --check reviewed-source/cloudflare/shared-nvidia-inference/src/evidence_status_feedback_v2.js
           node --check reviewed-source/cloudflare/shared-nvidia-inference/local-probe/src/evidence_status_caller.js
       - name: Admit exact existing Cloudflare private Service Binding temporarily
+        id: gate_enable
         shell: bash
         working-directory: controller
         run: |
@@ -140,9 +153,9 @@ jobs:
         run: |
           set -euo pipefail
           export CI=true
-          test "$(git rev-parse HEAD)" = "bccfa9ef96709942c31f2ed5c1ec39aeccfa1669"
-          python3 -m py_compile "$GITHUB_WORKSPACE/controller/scripts/nvidia_evidence_status_artifact_live_loop.py"
-          python3 -m unittest discover -s "$GITHUB_WORKSPACE/controller/tests" -p 'test_nvidia_evidence_status_artifact.py' -v
+          test "$(git rev-parse HEAD)" = "7ff97c4982b32cf08900dea000dd269a1f9d8ff1"
+          python3 -m py_compile "$GITHUB_WORKSPACE/controller/scripts/nvidia_evidence_status_artifact_live_loop_v2.py"
+          python3 -m unittest discover -s "$GITHUB_WORKSPACE/controller/tests" -p 'test_nvidia_evidence_status_live_controller_v2.py' -v
           node --check local-probe/src/evidence_status_caller.js
           npx --yes wrangler@4.151.3 dev --config local-probe/wrangler.evidence.jsonc --ip 127.0.0.1 --port 8787 > "$RUNNER_TEMP/nvidia_evidence_status_local.log" 2>&1 &
           pid=$!
@@ -154,24 +167,29 @@ jobs:
             sleep 1
           done
           if [ "$ready" != 1 ]; then echo 'NVIDIA_EVIDENCE_PRIVATE_CALLER_UNAVAILABLE'; exit 1; fi
-          PYTHONPATH="$GITHUB_WORKSPACE/controller/scripts" python3 "$GITHUB_WORKSPACE/controller/scripts/nvidia_evidence_status_artifact_live_loop.py"
+          PYTHONPATH="$GITHUB_WORKSPACE/controller/scripts" python3 "$GITHUB_WORKSPACE/controller/scripts/nvidia_evidence_status_artifact_live_loop_v2.py"
           python3 - <<'PY'
           import json
           from pathlib import Path
-          p=Path("artifacts/nvidia-evidence-status/evaluation.json")
+          p=Path("artifacts/nvidia-evidence-status-v2/evaluation.json")
           a=json.loads(p.read_text())
-          if (a["schema"]!="commandcenter.public_synthetic_evidence_status_review.v1" or
+          if (a["schema"]!="commandcenter.public_synthetic_evidence_status_review.v2" or
               not a["fictional_only"] or a["private_input_used"] or a["model_code_executed"] or
               a["commands_executed"] or a["production_admitted"] or
-              a["provider_requests"] not in (1,2) or a["baseline"]["total"]!=100 or
-              a["outcome"] not in ("FIRST_DRAFT_PASSED_NO_CORRECTION","CORRECTED_ALL_HOLDOUTS",
-                                   "PARTIAL_IMPROVEMENT","NO_GAIN","REGRESSED_REJECTED","REVISION_UNAVAILABLE",
-                                   "BASELINE_STRUCTURE_REJECTED","REVISION_STRUCTURE_REJECTED")):
-              raise SystemExit("NVIDIA_EVIDENCE_STATUS_UNTRUSTED")
+              a["holdout_case_details_disclosed_to_provider"] or
+              a["request_attempt_upper_bound"] not in (1,2) or
+              a["confirmed_provider_candidate_replies"] not in (1,2) or
+              a["reviewed_source_sha"]!="7ff97c4982b32cf08900dea000dd269a1f9d8ff1" or
+              a["balanced_v2"]["baseline"]["total"]!=74 or
+              a["legacy_v1"]["baseline"]["total"]!=100 or
+              (a["correction_qualified"] and
+               (a["balanced_v2"]["newly_correct_count"]<=0 or a["balanced_v2"]["regressed_count"] or
+                a["legacy_v1"]["regressions_count"] or a["balanced_v2"]["same_source"]))):
+              raise SystemExit("NVIDIA_EVIDENCE_STATUS_V2_UNTRUSTED")
           print("NVIDIA_EVIDENCE_STATUS_CAPTURED="+a["outcome"])
           PY
       - name: Always restore disabled diagnostics and original Secrets Store binding
-        if: always()
+        if: ${{ always() && steps.gate_enable.outcome != 'skipped' }}
         shell: bash
         working-directory: controller
         run: |
@@ -182,7 +200,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nvidia-evidence-status-live-revision
-          path: reviewed-source/cloudflare/shared-nvidia-inference/artifacts/nvidia-evidence-status/*
+          name: nvidia-evidence-status-v2-live-revision
+          path: reviewed-source/cloudflare/shared-nvidia-inference/artifacts/nvidia-evidence-status-v2/*
           retention-days: 14
           if-no-files-found: ignore
