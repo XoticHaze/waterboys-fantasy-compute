@@ -10,17 +10,27 @@
   "state": {
     "schema": "agent-fabric.j11.checkpoint.v1",
     "session_id": "j11-github-cas-control-20261125",
-    "revision": 0,
+    "revision": 1,
     "deadline": 5000,
     "max_attempts": 8,
-    "reserved": 0,
-    "pending": null,
+    "reserved": 1,
+    "pending": {
+      "id": "j11-github-cas-control-20261125:1",
+      "task": "A",
+      "expires": 1031
+    },
     "stopped": false,
-    "events": [],
+    "events": [
+      {
+        "type": "RESERVED",
+        "attempt": "j11-github-cas-control-20261125:1",
+        "task": "A"
+      }
+    ],
     "tasks": [
       {
         "id": "A",
-        "visits": 0,
+        "visits": 1,
         "observations": [],
         "accepted": null
       },
