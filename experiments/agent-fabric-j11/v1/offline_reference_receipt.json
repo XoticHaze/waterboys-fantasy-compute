@@ -1,0 +1,23 @@
+{
+  "schema": "agent-fabric.j11.offline-summary.v1",
+  "session_id": "offline-reference-control",
+  "accepted": 7,
+  "assigned": 7,
+  "complete": true,
+  "reserved_attempts": 16,
+  "uncertain_attempts": 1,
+  "boundary_violations": 0,
+  "duplicate_reads": 0,
+  "wrong_dispositions": 0,
+  "unbound_evidence": 0,
+  "model_calls": 0,
+  "classification": "OFFLINE_CONTROLLER_CONTROL_ONLY",
+  "fixture": "fixed-v1",
+  "control_uses_oracle": true,
+  "live_inference": false,
+  "private_input": false,
+  "provider_activation": false,
+  "checkpoint_roundtrip": true,
+  "budget_control_passed": true,
+  "boundary_control_passed": true
+}
