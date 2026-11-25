@@ -1,0 +1,46 @@
+{
+  "schema": "agent-fabric.j11.github_cas_control_receipt.v1",
+  "observed_at": "2026-11-25T12:19:58.323Z",
+  "source_revision": "37a2ed31dea8c4a4a002943c96d5a1b69d4df919",
+  "durable_module_blob": "ce8231563995b95658e5a29a57f16f6f34f2d9e3",
+  "checkpoint_path": "experiments/agent-fabric-j11/v1/checkpoints/github-cas-control-20261125.json",
+  "commits": [
+    "93ee1d3df5f58c60ca715d086610497ae0726e27",
+    "eca37feb9cba26ad51caf87b4f0d8ab1c0dcdad7",
+    "4222a797563092a9b7595ab89144d279d429fdf3",
+    "edf585b6aa9508a40888abd182a6107d3e0b2dd9"
+  ],
+  "view": {
+    "schema": "agent-fabric.j11.session_observation.v1",
+    "session_id": "j11-github-cas-control-20261125",
+    "accepted": 0,
+    "assigned": 7,
+    "complete": false,
+    "reserved_attempts": 2,
+    "uncertain_attempts": 1,
+    "boundary_violations": 0,
+    "duplicate_reads": 0,
+    "wrong_dispositions": 0,
+    "unbound_evidence": 0,
+    "model_calls": 0,
+    "classification": "OFFLINE_CONTROLLER_CONTROL_ONLY",
+    "mission_id": "j11-github-cas-control-20261125",
+    "blob_sha": "10939ef92104a1474b21db42045edf8c9fccc3bc",
+    "revision": 4,
+    "deadline": 5000,
+    "lease_active": false,
+    "expired": false,
+    "remaining_attempts": 6,
+    "dispatch_authority": false
+  },
+  "controls": {
+    "unadmitted_dispatch_denied": true,
+    "expired_attempt_rotated": true,
+    "old_reply_not_reexecuted": true,
+    "real_git_blob_cas_and_readback": true
+  },
+  "provider_calls": 0,
+  "synthetic_clock": true,
+  "production_dispatch": false,
+  "notes": "Admission=true only for fictional reference controller transitions; no actual executor or provider invoked. Checkpoint is a public test artifact, not canonical private mission queue."
+}
