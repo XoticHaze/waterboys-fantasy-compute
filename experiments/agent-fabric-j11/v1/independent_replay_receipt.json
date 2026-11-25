@@ -1,0 +1,33 @@
+{
+  "schema": "agent-fabric.j11.independent_source_replay.v1",
+  "observed_at": "2026-11-25T11:13:36.735Z",
+  "source_revision": "09fadaf68d34c08fca7fec7855d45fed0664b3f5",
+  "source_blob": "2d86d46e91c1fb13f2d7e6db708f2866e8de64b2",
+  "fixture_blob": "a459d065e6188ea8b01ab1a5b2c721789587982d",
+  "test_source_blob": "251c09e4092f8b56c2bab0c08d1d171a5b71a70f",
+  "execution": "V8 isolate independent fetched-source replay; not native Node test runner",
+  "controls": [
+    "7/7 interruption recovery",
+    "boundary rejection and replay",
+    "uncertain attempt retains budget",
+    "false completion and rotation",
+    "hard deadline"
+  ],
+  "summary": {
+    "schema": "agent-fabric.j11.offline-summary.v1",
+    "session_id": "independent-replay",
+    "accepted": 7,
+    "assigned": 7,
+    "complete": true,
+    "reserved_attempts": 16,
+    "uncertain_attempts": 1,
+    "boundary_violations": 0,
+    "duplicate_reads": 0,
+    "wrong_dispositions": 0,
+    "unbound_evidence": 0,
+    "model_calls": 0,
+    "classification": "OFFLINE_CONTROLLER_CONTROL_ONLY"
+  },
+  "provider_calls": 0,
+  "live_activation": false
+}
