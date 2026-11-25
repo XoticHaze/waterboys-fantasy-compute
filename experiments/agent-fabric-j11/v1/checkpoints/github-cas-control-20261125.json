@@ -1,0 +1,65 @@
+{
+  "schema": "agent-fabric.j11.durable_checkpoint.v1",
+  "identity": {
+    "mission_id": "j11-github-cas-control-20261125",
+    "fixture_blob": "a459d065e6188ea8b01ab1a5b2c721789587982d",
+    "controller_blob": "2d86d46e91c1fb13f2d7e6db708f2866e8de64b2",
+    "deadline": 5000,
+    "max_attempts": 8
+  },
+  "state": {
+    "schema": "agent-fabric.j11.checkpoint.v1",
+    "session_id": "j11-github-cas-control-20261125",
+    "revision": 0,
+    "deadline": 5000,
+    "max_attempts": 8,
+    "reserved": 0,
+    "pending": null,
+    "stopped": false,
+    "events": [],
+    "tasks": [
+      {
+        "id": "A",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      },
+      {
+        "id": "B",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      },
+      {
+        "id": "C",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      },
+      {
+        "id": "D",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      },
+      {
+        "id": "E",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      },
+      {
+        "id": "F",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      },
+      {
+        "id": "G",
+        "visits": 0,
+        "observations": [],
+        "accepted": null
+      }
+    ]
+  }
+}
