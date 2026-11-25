@@ -77,5 +77,5 @@ export async function commitTurn({f,identity,store,attempt,action,now}){
 export async function observeSession({f,identity,store,now}){
  const {blob_sha,document}=await readExact(f,identity,store);
  const s=document.state;
- return {schema:"agent-fabric.j11.session_observation.v1",mission_id:identity.mission_id,blob_sha,revision:s.revision,deadline:s.deadline,lease_active:!!s.pending&&now<s.pending.expires,expired:now>=s.deadline,remaining_attempts:s.max_attempts-s.reserved,...report(s),dispatch_authority:false};
+ return {...report(s),schema:"agent-fabric.j11.session_observation.v1",mission_id:identity.mission_id,blob_sha,revision:s.revision,deadline:s.deadline,lease_active:!!s.pending&&now<s.pending.expires,expired:now>=s.deadline,remaining_attempts:s.max_attempts-s.reserved,dispatch_authority:false};
 }
