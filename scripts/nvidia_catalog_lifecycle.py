@@ -63,7 +63,7 @@ def history(now):
             if job.get("name") != "synthetic-roles" or job.get("status") != "completed":
                 continue
             jid = job["id"]
-            log = subprocess.check_output(["gh","api",f"repos/{REPO}/actions/jobs/{jid}/logs"], timeout=45, text=True)
+            log = subprocess.check_output(["gh","api","--allow-escape-sequences",f"repos/{REPO}/actions/jobs/{jid}/logs"], timeout=45, text=True)
             for line in log.splitlines():
                 match = LOG.search(line)
                 if match:
