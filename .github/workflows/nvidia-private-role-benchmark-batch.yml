@@ -21,8 +21,8 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-    # Only a push to the legacy trigger may select a completion batch.
-    # Scheduled/manual workflow dispatch always refreshes the catalog first.
+    # Automatic refresh uses only fresh catalog identities and due pairs.
+    # A maximum of four two-model batches per daily cycle.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -69,6 +69,12 @@ jobs:
           print('ROLE_MAX_PROVIDER_REQUESTS='+str(len(selected)*9))
           print('ROLE_PAYLOAD_PRIVATE_DATA=false')
           PY
+      - name: Prepare existing benchmark evidence before provider admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ""
+          CLOUDFLARE_API_TOKEN: ""
+        run: python scripts/nvidia_catalog_lifecycle.py --seed ops/nvidia_shared_benchmark_seed.v1.json --github-history --prepare-history --history-cache nvidia-history.json
       - name: Admit fixed Worker diagnostics temporarily with binding-preserving readback
         shell: bash
         run: |
@@ -96,8 +102,12 @@ jobs:
           done
           if [ "$ready" != 1 ]; then echo 'NVIDIA_PRIVATE_SERVICE_CALLER=UNAVAILABLE'; exit 1; fi
           python - <<'PY'
-          import json,os,re
+          import json,os,re,sys
+          from datetime import datetime,timezone
           from pathlib import Path
+          root=Path(os.environ['GITHUB_WORKSPACE'])
+          sys.path.insert(0,str(root/'scripts'))
+          from nvidia_catalog_lifecycle import project,select_due_batches
           from urllib.request import Request,urlopen
           from urllib.error import HTTPError
           raw=(Path(os.environ['GITHUB_WORKSPACE'])/'ops/nvidia_role_batch_trigger.txt').read_text().strip()
@@ -109,7 +119,13 @@ jobs:
               start,count=map(int,m.groups());batches=list(range(start,start+count))
           if not batches or len(batches)>5 or batches[-1]>99:
               raise SystemExit('ROLE_BATCH_COUNT_EXCEEDED')
+          automatic=os.environ['GITHUB_EVENT_NAME']!='push'
+          # All non-legacy sweeps begin with a catalog GET. Explicit benchmark
+          # requests retain their existing budget and publish on the next refresh.
+          if automatic: batches=[-1]
           aggregate=0
+          catalog=None
+          observations=[]
           for batch in batches:
               data=json.dumps({'batch':batch},separators=(',',':')).encode()
               req=Request('http://127.0.0.1:8787/roles-batch',data=data,
@@ -127,7 +143,7 @@ jobs:
               if type(count)!=int or not 0<=count<=9:
                   raise SystemExit('ROLE_PROVIDER_BUDGET_INVALID')
               aggregate+=count
-              if aggregate>len(batches)*9:raise SystemExit('ROLE_TOTAL_PROVIDER_BUDGET_EXCEEDED')
+              if aggregate>(37 if automatic else len(batches)*9):raise SystemExit('ROLE_TOTAL_PROVIDER_BUDGET_EXCEEDED')
               print('NVIDIA_ROLE_CATALOG_HTTP='+str(doc.get('catalog_http')))
               print('NVIDIA_ROLE_CATALOG_COUNT='+str(doc.get('catalog_count')))
               print('NVIDIA_ROLE_ELIGIBLE_COUNT='+str(doc.get('eligible_count')))
@@ -144,9 +160,20 @@ jobs:
                       raise SystemExit('FULL_CATALOG_IDENTITY_INVALID')
                   if count!=1 or doc.get('results'):
                       raise SystemExit('CATALOG_ONLY_REQUEST_BUDGET_INVALID')
-                  from datetime import datetime, timezone
                   receipt={'observed_at':datetime.now(timezone.utc).isoformat(),'catalog_model_ids':all_ids,'eligible_model_ids':ids,'catalog_http':doc['catalog_http'],'calls':count,'run_id':int(os.environ['GITHUB_RUN_ID']),'run_attempt':int(os.environ['GITHUB_RUN_ATTEMPT']),'head_sha':os.environ['GITHUB_SHA']}
-                  (Path(os.environ['GITHUB_WORKSPACE'])/'nvidia-current-catalog.json').write_text(json.dumps(receipt,indent=2))
+                  catalog=receipt
+                  (root/'nvidia-current-catalog.json').write_text(json.dumps(receipt,indent=2))
+                  if automatic:
+                      cache=json.loads((root/'nvidia-history.json').read_text())
+                      plan=project(catalog,cache['observations'],datetime.now(timezone.utc),cache['complete'])
+                      batches.extend(select_due_batches(catalog,plan))
+                      print('NVIDIA_AUTO_DUE_BATCHES='+json.dumps(batches[1:]))
+              if batch>=0 and automatic:
+                  if doc.get('eligible_model_ids')!=catalog['eligible_model_ids'] or doc.get('catalog_model_ids')!=catalog['catalog_model_ids']:
+                      raise SystemExit('CATALOG_CHANGED_DURING_AUTO_REFRESH')
+                  if [r.get('model') for r in doc.get('results',[])]!=catalog['eligible_model_ids'][batch*2:batch*2+2]:
+                      raise SystemExit('AUTO_MODEL_IDENTITY_MISMATCH')
+              if batch == -1:
                   for index,model_id in enumerate(sorted(ids)):
                       if not isinstance(model_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{2,80}/[A-Za-z0-9_.:-]{2,120}',model_id):
                           raise SystemExit('WORKFORCE_CATALOG_MODEL_ID_INVALID')
@@ -164,17 +191,20 @@ jobs:
                   for task in item.get('results') or []:
                       if task.get('task') not in ('logic','json','math','tool_call','vision'):
                           raise SystemExit('ROLE_TASK_INVALID')
-                      print('NVIDIA_ROLE_OBSERVATION='+json.dumps({
+                      row={
                         'model':model,'task':task['task'],'http':task.get('http_status'),
                         'latency_ms':task.get('latency_ms'),'passed':task.get('passed'),
                         'format_valid':task.get('format_valid'),'error':task.get('error')
-                      },sort_keys=True,separators=(',',':')))
+                      }
+                      print('NVIDIA_ROLE_OBSERVATION='+json.dumps(row,sort_keys=True,separators=(',',':')))
+                      observations.append({**row,'at':datetime.now(timezone.utc).isoformat(),'run':int(os.environ['GITHUB_RUN_ID']),'job':int(os.environ['GITHUB_RUN_ID'])})
               print('NVIDIA_ROLE_RAW_ANSWERS_EXPORTED=false')
               print('NVIDIA_ROLE_HOUSEHOLD_DATA_EXPORTED=false')
               print('NVIDIA_ROLE_KEY_EXPORTED=false')
               if code!=200 or doc.get('status') not in ('catalog_only','batch_complete','end_of_catalog'):
                   raise SystemExit('ROLE_BATCH_DID_NOT_COMPLETE')
               print('NVIDIA_ROLE_BATCH_COMPLETED=PASS')
+          (root/'nvidia-current-observations.json').write_text(json.dumps(observations))
           print('NVIDIA_ROLE_TOTAL_PROVIDER_CALLS='+str(aggregate))
           print('NVIDIA_ROLE_GROUP_COMPLETED=PASS')
           PY
@@ -196,7 +226,19 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f nvidia-current-catalog.json ]; then exit 0; fi
-          python scripts/nvidia_catalog_lifecycle.py --catalog nvidia-current-catalog.json --seed ops/nvidia_shared_benchmark_seed.v1.json --output nvidia-model-lifecycle.json --github-history
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          path=Path('nvidia-current-observations.json')
+          rows=json.loads(path.read_text())
+          if rows:
+              jobs=json.loads(subprocess.check_output(['gh','api','repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['GITHUB_RUN_ID']+'/attempts/'+os.environ['GITHUB_RUN_ATTEMPT']+'/jobs'],text=True))['jobs']
+              matched=[j['id'] for j in jobs if j['name']=='synthetic-roles']
+              if len(matched)!=1: raise SystemExit('JOB_IDENTITY_UNVERIFIED')
+              for row in rows: row['job']=matched[0]
+              path.write_text(json.dumps(rows))
+          PY
+          python scripts/nvidia_catalog_lifecycle.py --catalog nvidia-current-catalog.json --seed ops/nvidia_shared_benchmark_seed.v1.json --output nvidia-model-lifecycle.json --history-cache nvidia-history.json --current-observations nvidia-current-observations.json
           echo 'catalog_ready=true' >> "$GITHUB_OUTPUT"
       - name: Publish sanitized shared model lifecycle
         if: success() && hashFiles('nvidia-model-lifecycle.json') != ''
