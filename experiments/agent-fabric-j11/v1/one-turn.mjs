@@ -57,7 +57,7 @@ export function admitProviderReply(reply,selector){
   return reply;
 }
 export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
-   routeAdmitted,budgetAdmitted,serviceTurn,reserveTurn,commitTurn}){
+   routeAdmitted,budgetAdmitted,serviceTurn,reserveTurn,commitTurn,holdProviderTurn=null}){
   need(Number.isSafeInteger(now)&&typeof routeAdmitted==='function'&&
     typeof budgetAdmitted==='function'&&typeof serviceTurn==='function'&&
     typeof reserveTurn==='function'&&typeof commitTurn==='function',
@@ -87,9 +87,26 @@ export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
     dispatch:false,provider_calls:null,attempt:reserve.request.attempt,accepted_tasks:null,receipt:null};}
   // Rate limit, provider denial and transient failure always stop this caller;
   // the reserved attempt remains pending. No automatic retry/extra spend.
-  if(FAIL_CLOSED.has(reply.status))return {schema:'agent-fabric.j11.turn_outcome.v1',
-     status:reply.status,dispatch:false,provider_calls:reply.provider_attempt_upper_bound,
-     attempt:reserve.request.attempt,accepted_tasks:null,receipt:null,stop_this_pass:true};
+  if(FAIL_CLOSED.has(reply.status)){
+    // Definite provider 429/denial can be persisted terminally through the
+    // existing same-ID checkpoint CAS. An indeterminate transport may have
+    // executed; never claim a definite hold or force an automatic replay.
+    let hold=null;
+    if(reply.status!=='transport_or_decode_failure'&&typeof holdProviderTurn==='function'){
+      try{hold=await holdProviderTurn({f,identity,store,
+        attempt:reserve.request.attempt,reason:reply.status,now:now+1});}
+      catch{return {schema:'agent-fabric.j11.turn_outcome.v1',
+        status:'provider_hold_indeterminate_reconcile',dispatch:false,provider_calls:1,
+        attempt:reserve.request.attempt,accepted_tasks:null,receipt:null,stop_this_pass:true};}
+    }
+    return {schema:'agent-fabric.j11.turn_outcome.v1',
+      status:hold?.status==='provider_held'?'provider_held':reply.status,
+      provider_status:reply.status,dispatch:false,provider_calls:1,
+      attempt:reserve.request.attempt,accepted_tasks:null,
+      checkpoint_blob_sha:hold?.status==='provider_held'?hold.blob_sha:null,
+      checkpoint_commit_sha:hold?.status==='provider_held'?hold.commit_sha:null,
+      receipt:null,stop_this_pass:true};
+  }
   const action=reply.status==='candidate_unexecuted'?reply.action:{kind:'yield'};
   const committed=await commitTurn({f,identity,store,attempt:reserve.request.attempt,
      action,now:now+1});
