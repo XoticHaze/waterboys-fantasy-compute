@@ -23,3 +23,9 @@ test('wrong task/model/provenance never yields accepted job',async()=>{for(const
 test('selector is derived only from durable request and rejects unobserved routes',()=>{assert.deepEqual(candidateSelector(f,identity,reserved),{fixture_blob:FIXTURE_BLOB,task_id:'A',observed_routes:[]});assert.throws(()=>candidateSelector(f,identity,{...reserved,request:{...reserved.request,observations:[{route:'secret'}]}}));});
 test('noncandidate cannot convey executable model action',()=>{assert.throws(()=>admitProviderReply(good({kind:'read',route:'mailbox'},'rate_limited'),{fixture_blob:FIXTURE_BLOB,task_id:'A',observed_routes:[]}));});
 test('failed checkpoint readback cannot become accepted result',async()=>{const {args}=makeEnv({commit:'indeterminate_reconcile'});const r=await runOneTurn(args);assert.equal(r.accepted_tasks,null);assert.equal(r.receipt,null);});
+
+test('definite 429 is acknowledged with a durable held receipt when owner binding exists',async()=>{
+ const {events,args}=makeEnv({reply:good(null,'rate_limited')});
+ args.holdProviderTurn=async ({reason,attempt})=>{events.push('hold');assert.equal(reason,'rate_limited');assert.equal(attempt,'test-j11:1');return {status:'provider_held',blob_sha:'a'.repeat(40),commit_sha:'b'.repeat(40)}};
+ const r=await runOneTurn(args);assert.equal(r.status,'provider_held');assert.equal(r.provider_status,'rate_limited');assert.equal(r.accepted_tasks,null);assert.equal(r.stop_this_pass,true);assert.equal(r.checkpoint_blob_sha,'a'.repeat(40));assert.equal(events.includes('commit'),false);
+});
