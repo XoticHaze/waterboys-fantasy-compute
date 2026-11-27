@@ -8,7 +8,7 @@ const good=(action={kind:'read',route:'mailbox'},status='candidate_unexecuted')=
 const record={calls:[],fake:{}};
 function makeEnv({route=true,budget=true,reserve=reserved,reply=good(),throwService=false,commit='written'}={}){
   const events=[];
-  const args={f,identity,now:1001,store:{},routeAdmitted:async()=>{events.push('route');return route},
+  const args={f,identity,now:1001,store:{},postTurnNow:async()=>1002,routeAdmitted:async()=>{events.push('route');return route},
     budgetAdmitted:async x=>{events.push('budget');assert.equal(x.max_calls,1);assert.equal(x.free_only,true);return budget},
     reserveTurn:async x=>{events.push('reserve');const allow=await x.admission();if(!allow)return {status:'route_held',dispatch:false};events.push('persist');return reserve},
     serviceTurn:async x=>{events.push('provider');assert.equal(x.selector.task_id,'A');if(throwService)throw Error('timeout');return reply},
@@ -28,4 +28,10 @@ test('definite 429 is acknowledged with a durable held receipt when owner bindin
  const {events,args}=makeEnv({reply:good(null,'rate_limited')});
  args.holdProviderTurn=async ({reason,attempt})=>{events.push('hold');assert.equal(reason,'rate_limited');assert.equal(attempt,'test-j11:1');return {status:'provider_held',blob_sha:'a'.repeat(40),commit_sha:'b'.repeat(40)}};
  const r=await runOneTurn(args);assert.equal(r.status,'provider_held');assert.equal(r.provider_status,'rate_limited');assert.equal(r.accepted_tasks,null);assert.equal(r.stop_this_pass,true);assert.equal(r.checkpoint_blob_sha,'a'.repeat(40));assert.equal(events.includes('commit'),false);
+});
+
+test('post-provider clock failure cannot commit or hide an expired reservation',async()=>{
+ const {args,events}=makeEnv();args.postTurnNow=async()=>1001;
+ const r=await runOneTurn(args);assert.equal(r.status,'post_turn_clock_unavailable_reconcile');
+ assert.equal(r.provider_calls,null);assert.equal(events.includes('commit'),false);
 });
