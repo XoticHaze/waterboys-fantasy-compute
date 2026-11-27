@@ -57,10 +57,11 @@ export function admitProviderReply(reply,selector){
   return reply;
 }
 export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
-   routeAdmitted,budgetAdmitted,serviceTurn,reserveTurn,commitTurn,holdProviderTurn=null}){
+   routeAdmitted,budgetAdmitted,serviceTurn,reserveTurn,commitTurn,holdProviderTurn=null,postTurnNow}){
   need(Number.isSafeInteger(now)&&typeof routeAdmitted==='function'&&
     typeof budgetAdmitted==='function'&&typeof serviceTurn==='function'&&
-    typeof reserveTurn==='function'&&typeof commitTurn==='function',
+    typeof reserveTurn==='function'&&typeof commitTurn==='function'&&
+    typeof postTurnNow==='function',
     'trusted_host_interfaces_required');
   let budgetHeld=false;
   const reserve=await reserveTurn({f,identity,store,now,leaseSeconds,
@@ -85,6 +86,14 @@ export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
   try{admitProviderReply(reply,selector);}
   catch{return {schema:'agent-fabric.j11.turn_outcome.v1',status:'provider_result_untrusted_reconcile',
     dispatch:false,provider_calls:null,attempt:reserve.request.attempt,accepted_tasks:null,receipt:null};}
+  // Read a NEW trusted clock AFTER the external provider response. Synthetic
+  // now+1 would silently accept expired leases during slow/uncertain calls.
+  let finished;
+  try{finished=await postTurnNow(identity);}catch{finished=null;}
+  if(!Number.isSafeInteger(finished)||finished<=now)return {
+    schema:'agent-fabric.j11.turn_outcome.v1',status:'post_turn_clock_unavailable_reconcile',
+    dispatch:false,provider_calls:null,attempt:reserve.request.attempt,
+    accepted_tasks:null,receipt:null,stop_this_pass:true};
   // Rate limit, provider denial and transient failure always stop this caller;
   // the reserved attempt remains pending. No automatic retry/extra spend.
   if(FAIL_CLOSED.has(reply.status)){
@@ -94,7 +103,7 @@ export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
     let hold=null;
     if(reply.status!=='transport_or_decode_failure'&&typeof holdProviderTurn==='function'){
       try{hold=await holdProviderTurn({f,identity,store,
-        attempt:reserve.request.attempt,reason:reply.status,now:now+1});}
+        attempt:reserve.request.attempt,reason:reply.status,now:finished});}
       catch{return {schema:'agent-fabric.j11.turn_outcome.v1',
         status:'provider_hold_indeterminate_reconcile',dispatch:false,provider_calls:1,
         attempt:reserve.request.attempt,accepted_tasks:null,receipt:null,stop_this_pass:true};}
@@ -109,7 +118,7 @@ export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
   }
   const action=reply.status==='candidate_unexecuted'?reply.action:{kind:'yield'};
   const committed=await commitTurn({f,identity,store,attempt:reserve.request.attempt,
-     action,now:now+1});
+     action,now:finished});
   const pass=committed?.status==='written';
   return {schema:'agent-fabric.j11.turn_outcome.v1',
     status:pass?'checkpoint_committed':committed?.status||'commit_indeterminate',
