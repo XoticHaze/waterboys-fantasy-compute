@@ -98,11 +98,18 @@ def cases_for(index):
   raise ValueError("INVALID_FIXED_ROLE_TASK")
  return tuple((x,oracle(index,x)) for x in INPUTS[index])
 
+def fixed_role_http_timeout(model_index):
+ # Allow the caller to outlive the approved 75-second MiniMax Worker cap,
+ # without silently raising Poolside's normal 55-second caller budget.
+ if type(model_index)!=int or model_index not in (0,1):
+  raise RuntimeError("INVALID_MODEL")
+ return 90 if model_index==1 else 55
+
 def call_case(model_index,task_index):
  selector=json.dumps({"model_index":model_index,"task_index":task_index},separators=(",",":")).encode()
  req=Request(URL,data=selector,headers={"Content-Type":"application/json"},method="POST")
  try:
-  with urlopen(req,timeout=55) as r:
+  with urlopen(req,timeout=fixed_role_http_timeout(model_index)) as r:
    return json.loads(r.read(14000))
  except HTTPError as exc:
   try:return json.loads(exc.read(14000))
@@ -128,6 +135,27 @@ def safe_case(doc,model_index,task_index):
  if status=="candidate_unexecuted" and (code!=200 or not isinstance(src,str)):
   raise RuntimeError("UNTRUSTED_ROLE_CASE_SOURCE")
  return status,code,src
+
+def safe_role_output_diagnostics(doc):
+ """Preserve only small model-failure metadata; never source or reasoning text."""
+ if not isinstance(doc,dict):
+  raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+ finish=doc.get("finish_reason","not_recorded")
+ final=doc.get("final_content_present",None)
+ reasoning=doc.get("reasoning_content_present",None)
+ if(type(finish)!=str or finish not in
+      ("stop","length","tool_calls","content_filter","other","not_recorded")
+    or (final is not None and type(final)!=bool)
+    or (reasoning is not None and type(reasoning)!=bool)):
+  raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+ counts={}
+ for field in ("prompt_tokens","completion_tokens","reasoning_tokens"):
+  value=doc.get(field,None)
+  if(value is not None and (type(value)!=int or not 0<=value<=1000000)):
+   raise RuntimeError("UNTRUSTED_ROLE_DIAGNOSTICS")
+  counts[field]=value
+ return {"finish_reason":finish,"final_content_present":final,
+         "reasoning_content_present":reasoning,**counts}
 
 def run_model(model_index,first_task=0,end_task=None):
  if type(model_index)!=int or model_index not in (0,1):raise RuntimeError("INVALID_MODEL")
@@ -164,6 +192,7 @@ def run_model(model_index,first_task=0,end_task=None):
     status="ast_rejected"
     rejection_reason="AST_TYPE_REJECTED"
   receipt={"model":MODELS[model_index],"task_id":task[0],"task_index":task_index,
+   **safe_role_output_diagnostics(doc),
    "provider_status":status,"http_status":http,
    "latency_ms":doc.get("elapsed_ms"),"tests_passed":scores["passed"],
    "tests_total":scores["total"],"all_tests_passed":scores["all_passed"],
