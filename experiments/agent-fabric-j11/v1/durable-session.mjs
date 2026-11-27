@@ -23,7 +23,14 @@ export function verifyCheckpoint(f,d,identity){
  for(const e of s.events){
   need(e&&f.tasks.some(t=>t.id===e.task)&&typeof e.attempt==="string","event_identity");
   if(e.type==="RESERVED"){need(!ids.has(e.attempt)&&e.attempt===s.session_id+":"+(ids.size+1),"reservation_replay");ids.add(e.attempt);open.set(e.attempt,e.task);}
-  else {need(open.get(e.attempt)===e.task,"terminal_without_reservation");open.delete(e.attempt);if(e.type==="ACCEPTED"){need(!accepted.has(e.task),"duplicate_accept");accepted.set(e.task,e.attempt);}}
+  else {
+   need(['READ','ACCEPTED','REJECTED','BOUNDARY_VIOLATION','DUPLICATE_READ',
+     'UNBOUND_EVIDENCE','WRONG_DISPOSITION','YIELD','UNCERTAIN_ATTEMPT',
+     'PROVIDER_HELD'].includes(e.type),'unknown_terminal_event');
+   if(e.type==='PROVIDER_HELD')
+     need(s.stopped===true&&['rate_limited','provider_unavailable'].includes(e.reason),
+       'provider_hold_invalid');
+   need(open.get(e.attempt)===e.task,"terminal_without_reservation");open.delete(e.attempt);if(e.type==="ACCEPTED"){need(!accepted.has(e.task),"duplicate_accept");accepted.set(e.task,e.attempt);}}
  }
  need(ids.size===s.reserved&&s.tasks.reduce((n,t)=>n+t.visits,0)===s.reserved&&open.size===(s.pending?1:0),"reservation_count");
  if(s.pending)need(open.get(s.pending.id)===s.pending.task&&Number.isSafeInteger(s.pending.expires)&&s.pending.expires<=s.deadline,"pending_identity");
