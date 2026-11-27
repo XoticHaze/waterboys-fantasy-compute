@@ -35,7 +35,7 @@ jobs:
           node-version: '22'
       - name: Select catalog-only for scheduled and manual refresh
         if: github.event_name != 'push'
-        run: printf '%s\n' 'batch=-1' > ops/nvidia_role_batch_trigger.txt
+        run: printf '%s\n' 'auto' > ops/nvidia_role_batch_trigger.txt
       - name: Validate approved exact benchmark and selector
         shell: bash
         run: |
@@ -49,6 +49,10 @@ jobs:
           import re
           from pathlib import Path
           raw=Path('ops/nvidia_role_batch_trigger.txt').read_text().strip()
+          if raw == 'auto':
+              print('NVIDIA_ROLE_BATCHES_SELECTED=AUTO_DUE')
+              print('ROLE_MAX_PROVIDER_REQUESTS=37')
+              raise SystemExit(0)
           if raw == 'all':
               print('NVIDIA_ROLE_BATCHES_SELECTED=ALL_ELIGIBLE')
               print('ROLE_MAX_PROVIDER_REQUESTS=4000')
@@ -111,7 +115,9 @@ jobs:
           from urllib.request import Request,urlopen
           from urllib.error import HTTPError
           raw=(Path(os.environ['GITHUB_WORKSPACE'])/'ops/nvidia_role_batch_trigger.txt').read_text().strip()
-          if re.fullmatch(r'batch=(-2|-1|[0-9]|[1-9][0-9])',raw):
+          if raw=='auto':
+              batches=[-1]
+          elif re.fullmatch(r'batch=(-2|-1|[0-9]|[1-9][0-9])',raw):
               batches=[int(raw.split('=')[1])]
           else:
               m=re.fullmatch(r'range=([0-9]|[1-9][0-9]):([1-5])',raw)
@@ -119,7 +125,7 @@ jobs:
               start,count=map(int,m.groups());batches=list(range(start,start+count))
           if not batches or len(batches)>5 or batches[-1]>99:
               raise SystemExit('ROLE_BATCH_COUNT_EXCEEDED')
-          automatic=os.environ['GITHUB_EVENT_NAME']!='push'
+          automatic=raw=='auto'
           # All non-legacy sweeps begin with a catalog GET. Explicit benchmark
           # requests retain their existing budget and publish on the next refresh.
           if automatic: batches=[-1]
@@ -197,7 +203,7 @@ jobs:
                         'format_valid':task.get('format_valid'),'error':task.get('error')
                       }
                       print('NVIDIA_ROLE_OBSERVATION='+json.dumps(row,sort_keys=True,separators=(',',':')))
-                      observations.append({**row,'at':datetime.now(timezone.utc).isoformat(),'run':int(os.environ['GITHUB_RUN_ID']),'job':int(os.environ['GITHUB_RUN_ID'])})
+                      observations.append({**row,'at':datetime.now(timezone.utc).isoformat(),'run':int(os.environ['GITHUB_RUN_ID']),'job':None})
               print('NVIDIA_ROLE_RAW_ANSWERS_EXPORTED=false')
               print('NVIDIA_ROLE_HOUSEHOLD_DATA_EXPORTED=false')
               print('NVIDIA_ROLE_KEY_EXPORTED=false')
