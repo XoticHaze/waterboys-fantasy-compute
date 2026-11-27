@@ -1,105 +1,7 @@
 {
   "activation_authorized": false,
-  "automatic_completion_calls": 0,
+  "automatic_completion_calls": 20,
   "benchmark_due": [
-    {
-      "attempted_tasks": 4,
-      "job_id": 135463341781,
-      "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
-      "observed_at": "2026-11-19T09:24:34.258873+00:00",
-      "passed_tasks": 1,
-      "reason": "weekly_requalification_due",
-      "run_id": 44496039493
-    },
-    {
-      "attempted_tasks": 4,
-      "job_id": 135463341781,
-      "model": "nvidia/nemotron-3.5-bolt-e4b",
-      "observed_at": "2026-11-19T09:24:34.259326+00:00",
-      "passed_tasks": 3,
-      "reason": "weekly_requalification_due",
-      "run_id": 44496039493
-    },
-    {
-      "attempted_tasks": 4,
-      "job_id": 135470738513,
-      "model": "nvidia/nemotron-3-ultra-550b-a55b",
-      "observed_at": "2026-11-19T09:38:23.936869+00:00",
-      "passed_tasks": 4,
-      "reason": "weekly_requalification_due",
-      "run_id": 44498207526
-    },
-    {
-      "attempted_tasks": 1,
-      "job_id": 135470738513,
-      "model": "bigcode/starcoder2-15b",
-      "observed_at": "2026-11-19T09:38:23.937098+00:00",
-      "passed_tasks": 0,
-      "reason": "weekly_requalification_due",
-      "run_id": 44498207526
-    },
-    {
-      "model": "fastino/gliner2-pii",
-      "reason": "no_prior_benchmark"
-    },
-    {
-      "attempted_tasks": 1,
-      "job_id": 124841635629,
-      "model": "google/gemma-3-12b-it",
-      "observed_at": "2026-11-01T12:01:42.277312+00:00",
-      "passed_tasks": 0,
-      "reason": "weekly_requalification_due",
-      "run_id": 41304366370
-    },
-    {
-      "attempted_tasks": 1,
-      "job_id": 124841635629,
-      "model": "google/gemma-3-4b-it",
-      "observed_at": "2026-11-01T12:01:42.277519+00:00",
-      "passed_tasks": 0,
-      "reason": "weekly_requalification_due",
-      "run_id": 41304366370
-    },
-    {
-      "attempted_tasks": 1,
-      "job_id": 135480912856,
-      "model": "minimaxai/minimax-m3.1-flash",
-      "observed_at": "2026-11-19T09:58:44.376645+00:00",
-      "passed_tasks": 0,
-      "reason": "weekly_requalification_due",
-      "run_id": 44501135245
-    },
-    {
-      "attempted_tasks": 3,
-      "job_id": 135480912856,
-      "model": "mistralai/mistral-large-4-1t-a52b",
-      "observed_at": "2026-11-19T09:58:44.377030+00:00",
-      "passed_tasks": 1,
-      "reason": "weekly_requalification_due",
-      "run_id": 44501135245
-    },
-    {
-      "model": "moonshotai/kimi-k3.1-pro",
-      "reason": "no_prior_benchmark"
-    },
-    {
-      "attempted_tasks": 3,
-      "job_id": 124841635629,
-      "model": "nvidia/ising-calibration-1.5-31b",
-      "observed_at": "2026-11-01T12:12:11.109705+00:00",
-      "passed_tasks": 1,
-      "reason": "weekly_requalification_due",
-      "run_id": 41304366370
-    },
-    {
-      "attempted_tasks": 4,
-      "job_id": 124841635629,
-      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-      "observed_at": "2026-11-01T12:12:25.052107+00:00",
-      "passed_tasks": 2,
-      "reason": "weekly_requalification_due",
-      "run_id": 41304366370
-    },
     {
       "attempted_tasks": 4,
       "job_id": 124841635629,
@@ -200,10 +102,10 @@
       "stepfun-ai/step-5-preview",
       "z-ai/glm-5.3-flash"
     ],
-    "head_sha": "6be9cda9d0f0d0b5649f6f733e738b971a469bb4",
-    "observed_at": "2026-11-27T08:44:21.518673+00:00",
+    "head_sha": "494cb5ad97b0981a956969e42872b65e9bcb4fc3",
+    "observed_at": "2026-11-27T08:50:22.730244+00:00",
     "run_attempt": 1,
-    "run_id": 45967947350
+    "run_id": 45968673093
   },
   "history_complete": true,
   "next_action": "exact_model_benchmark_pending_budget_and_selector",
@@ -256,7 +158,114 @@
     "z-ai/glm-5.3",
     "zyphra/zamba2-7b-instruct"
   ],
-  "ranked_assist_candidates": [],
-  "retained_benchmarks": [],
+  "ranked_assist_candidates": [
+    {
+      "attempted_tasks": 4,
+      "job_id": 140401914740,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "observed_at": "2026-11-27T08:46:42.847563+00:00",
+      "p50_ms": 1729.0,
+      "passed_tasks": 4,
+      "run_id": 45968207874
+    }
+  ],
+  "retained_benchmarks": [
+    {
+      "attempted_tasks": 4,
+      "job_id": 140401914740,
+      "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "observed_at": "2026-11-27T08:46:42.846410+00:00",
+      "passed_tasks": 1,
+      "run_id": 45968207874
+    },
+    {
+      "attempted_tasks": 4,
+      "job_id": 140401914740,
+      "model": "nvidia/nemotron-3.5-bolt-e4b",
+      "observed_at": "2026-11-27T08:46:42.846790+00:00",
+      "passed_tasks": 3,
+      "run_id": 45968207874
+    },
+    {
+      "attempted_tasks": 4,
+      "job_id": 140401914740,
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "observed_at": "2026-11-27T08:46:42.847563+00:00",
+      "passed_tasks": 4,
+      "run_id": 45968207874
+    },
+    {
+      "attempted_tasks": 1,
+      "job_id": 140401914740,
+      "model": "bigcode/starcoder2-15b",
+      "observed_at": "2026-11-27T08:46:42.847643+00:00",
+      "passed_tasks": 0,
+      "run_id": 45968207874
+    },
+    {
+      "attempted_tasks": 4,
+      "job_id": 140403447704,
+      "model": "fastino/gliner2-pii",
+      "observed_at": "2026-11-27T08:50:28.728739+00:00",
+      "passed_tasks": 0,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 1,
+      "job_id": 140403447704,
+      "model": "google/gemma-3-12b-it",
+      "observed_at": "2026-11-27T08:50:28.728751+00:00",
+      "passed_tasks": 0,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 1,
+      "job_id": 140403447704,
+      "model": "google/gemma-3-4b-it",
+      "observed_at": "2026-11-27T08:50:49.727764+00:00",
+      "passed_tasks": 0,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 1,
+      "job_id": 140403447704,
+      "model": "minimaxai/minimax-m3.1-flash",
+      "observed_at": "2026-11-27T08:50:49.727792+00:00",
+      "passed_tasks": 0,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 4,
+      "job_id": 140403447704,
+      "model": "mistralai/mistral-large-4-1t-a52b",
+      "observed_at": "2026-11-27T08:51:37.561155+00:00",
+      "passed_tasks": 2,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 1,
+      "job_id": 140403447704,
+      "model": "moonshotai/kimi-k3.1-pro",
+      "observed_at": "2026-11-27T08:51:37.561163+00:00",
+      "passed_tasks": 0,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 4,
+      "job_id": 140403447704,
+      "model": "nvidia/ising-calibration-1.5-31b",
+      "observed_at": "2026-11-27T08:52:05.938214+00:00",
+      "passed_tasks": 2,
+      "run_id": 45968673093
+    },
+    {
+      "attempted_tasks": 4,
+      "job_id": 140403447704,
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "observed_at": "2026-11-27T08:52:05.938240+00:00",
+      "passed_tasks": 2,
+      "run_id": 45968673093
+    }
+  ],
   "schema": "commandcenter.nvidia_catalog_lifecycle.v1"
 }
