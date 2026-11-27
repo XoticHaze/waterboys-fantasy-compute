@@ -35,7 +35,7 @@ jobs:
           node-version: '22'
       - name: Select catalog-only for scheduled and manual refresh
         if: github.event_name != 'push'
-        run: printf 'batch=-1\\n' > ops/nvidia_role_batch_trigger.txt
+        run: printf '%s\n' 'batch=-1' > ops/nvidia_role_batch_trigger.txt
       - name: Validate approved exact benchmark and selector
         shell: bash
         run: |
@@ -146,7 +146,7 @@ jobs:
                       raise SystemExit('CATALOG_ONLY_REQUEST_BUDGET_INVALID')
                   from datetime import datetime, timezone
                   receipt={'observed_at':datetime.now(timezone.utc).isoformat(),'catalog_model_ids':all_ids,'eligible_model_ids':ids,'catalog_http':doc['catalog_http'],'calls':count,'run_id':int(os.environ['GITHUB_RUN_ID']),'run_attempt':int(os.environ['GITHUB_RUN_ATTEMPT']),'head_sha':os.environ['GITHUB_SHA']}
-                  (Path(os.environ['GITHUB_WORKSPACE'])/'nvidia-current-catalog.json').write_text(json.dumps(receipt,indent=2)+'\\n')
+                  (Path(os.environ['GITHUB_WORKSPACE'])/'nvidia-current-catalog.json').write_text(json.dumps(receipt,indent=2))
                   for index,model_id in enumerate(sorted(ids)):
                       if not isinstance(model_id,str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{2,80}/[A-Za-z0-9_.:-]{2,120}',model_id):
                           raise SystemExit('WORKFORCE_CATALOG_MODEL_ID_INVALID')
