@@ -79,3 +79,23 @@ export async function observeSession({f,identity,store,now}){
  const s=document.state;
  return {...report(s),schema:"agent-fabric.j11.session_observation.v1",mission_id:identity.mission_id,blob_sha,revision:s.revision,deadline:s.deadline,lease_active:!!s.pending&&now<s.pending.expires,expired:now>=s.deadline,remaining_attempts:s.max_attempts-s.reserved,dispatch_authority:false};
 }
+
+const PROVIDER_HOLD_REASONS=new Set(['rate_limited','provider_unavailable']);
+// A definite HTTP provider hold is terminal for this mission. Commit it
+// through the same CAS + independent readback as normal model actions, without
+// pretending an inference result was accepted or silently retrying the turn.
+export async function holdProviderTurn({f,identity,store,attempt,reason,now}){
+ need(PROVIDER_HOLD_REASONS.has(reason)&&typeof attempt==='string'&&
+      Number.isSafeInteger(now),'provider_hold_shape');
+ const before=await readExact(f,identity,store);
+ const s=before.document.state;
+ need(s.pending?.id===attempt&&now<s.pending.expires&&
+      s.events.some(e=>e.type==='RESERVED'&&e.attempt===attempt),
+      'provider_hold_requires_current_reservation');
+ const next=clone(s),pending=next.pending;
+ next.pending=null;next.stopped=true;next.revision++;
+ next.events.push({type:'PROVIDER_HELD',attempt,task:pending.task,reason});
+ const saved=await persist(f,identity,store,before,{...before.document,state:next});
+ if(saved.status!=='written')return {...saved,status:'hold_commit_indeterminate',dispatch:false};
+ return {...saved,status:'provider_held',reason,dispatch:false,model_work_accepted:false};
+}
