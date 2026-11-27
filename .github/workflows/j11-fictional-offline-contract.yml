@@ -1,0 +1,26 @@
+name: J11 Public-Fictional Offline Contract
+on:
+  push:
+    branches: [agent-fabric/j11-durable-session-20261125]
+    paths:
+      - 'experiments/agent-fabric-j11/v1/**'
+      - '.github/workflows/j11-fictional-offline-contract.yml'
+permissions:
+  contents: read
+jobs:
+  controller-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Only fictional J11 controller and one-turn tests, zero provider calls
+        run: |
+          set -euo pipefail
+          node --check experiments/agent-fabric-j11/v1/durable-session.mjs
+          node --check experiments/agent-fabric-j11/v1/one-turn.mjs
+          node --test experiments/agent-fabric-j11/v1/*.test.mjs
