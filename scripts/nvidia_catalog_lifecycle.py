@@ -54,7 +54,7 @@ def history(now):
     if data.get("total_count", 0) > 100:
         raise RuntimeError("history window exceeds one page; extend bounded pagination")
     for run in data.get("workflow_runs", []):
-        if run.get("status") != "completed" or run.get("event") != "push":
+        if run.get("status") != "completed" or run.get("conclusion") != "success":
             continue
         rid = run["id"]
         # Catalog-only jobs have no observations; skip only after actual logs.
@@ -117,11 +117,22 @@ def project(catalog, observations, now, history_complete):
             "automatic_completion_calls":0,"activation_authorized":False,
             "next_action":"exact_model_benchmark_pending_budget_and_selector" if due else "reuse_current_benchmarks"}
 
+def select_due_batches(catalog, plan, limit=4):
+    if not plan["history_complete"]:
+        return []
+    due = {r["model"] for r in plan["benchmark_due"]}
+    ids = catalog["eligible_model_ids"]
+    pairs = [(i//2, ids[i:i+2]) for i in range(0,len(ids),2)]
+    return [i for i, members in pairs if members and set(members)<=due][:limit]
+
 def main():
     p=argparse.ArgumentParser()
     for name in ("catalog","seed","output"):
-        p.add_argument("--"+name,required=True,type=Path)
+        p.add_argument("--"+name,type=Path)
     p.add_argument("--github-history",action="store_true")
+    p.add_argument("--current-observations",type=Path)
+    p.add_argument("--history-cache",type=Path)
+    p.add_argument("--prepare-history",action="store_true")
     args=p.parse_args()
     now=datetime.now(timezone.utc)
     rows=json.loads(args.seed.read_text())["observations"]
@@ -132,7 +143,19 @@ def main():
             complete=True
         except (subprocess.SubprocessError,RuntimeError,ValueError,KeyError):
             print("NVIDIA_HISTORY_PARTIAL_SEED_RETAINED")
+    if args.prepare_history:
+        if not args.history_cache:
+            p.error("history cache required")
+        args.history_cache.write_text(json.dumps({"observations":rows,"complete":complete}))
+        return
+    if args.history_cache:
+        cache=json.loads(args.history_cache.read_text())
+        rows=cache["observations"]
+        complete=cache["complete"]
+    if args.current_observations:
+        rows.extend(json.loads(args.current_observations.read_text()))
     result=project(json.loads(args.catalog.read_text()),rows,now,complete)
+    result["automatic_completion_calls"]=sum(1 for x in json.loads(args.current_observations.read_text()) if x.get("task") in TASKS) if args.current_observations else 0
     args.output.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
     print("NVIDIA_LIFECYCLE_COUNTS="+json.dumps({k:len(result[k]) for k in ("benchmark_due","retained_benchmarks","ranked_assist_candidates","not_in_current_catalog")}))
 if __name__=="__main__":
