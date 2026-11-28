@@ -16,7 +16,7 @@ CI="46143876262"
 def scripts(text):
     lines=text.splitlines();out=[];i=0
     while i<len(lines):
-        line=lines[i];match=re.match(r"^(\\s*)python(?:3)? - <<'PY'\\s*$",line)
+        line=lines[i];match=re.match(r"^(\s*)python(?:3)? - <<'PY'\s*$",line)
         if not match: i+=1;continue
         prefix=len(match.group(1));block=[];i+=1
         while i<len(lines) and lines[i].strip()!="PY":
