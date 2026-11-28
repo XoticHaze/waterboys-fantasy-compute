@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {makeCheckpoint,reserveTurn,commitTurn,holdProviderTurn,observeSession} from './durable-session.mjs';
 import {runOneTurn,FIXTURE_BLOB} from './one-turn.mjs';
 import {createJ11Caller} from '../../../j11-worker-source/cloudflare/shared-nvidia-inference/local-probe/src/j11_caller.js';
 import {handleJ11PrivateRoute} from '../../../j11-worker-source/cloudflare/shared-nvidia-inference/src/j11_private_route.js';
@@ -78,4 +80,58 @@ test('upstream 429 yields held non-replayable turn and zero accepted work',async
  assert.equal(r.accepted_tasks,null);
  assert.equal(r.receipt,null);
  assert.deepEqual(x.counters(),{providerCalls:1,commits:0,bindingCalls:1});
+});
+
+const cFixture={...fixture,tasks:[fixture.tasks[0]]};
+const cIdentity={mission_id:'cross-source-real-cas',fixture_blob:FIXTURE_BLOB,
+  controller_blob:'2d86d46e91c1fb13f2d7e6db708f2866e8de64b2',deadline:1400,max_attempts:3};
+const clone=x=>JSON.parse(JSON.stringify(x));
+const gitSHA=x=>{const bytes=Buffer.from(JSON.stringify(x));return createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex')};
+function casStore(initial){
+ let value=clone(initial),sha=gitSHA(value);
+ return {read:async()=>({blob_sha:sha,document:clone(value)}),
+   compareAndSet:async(old,next)=>{
+     if(old!==sha)return {status:'conflict'};
+     value=clone(next);sha=gitSHA(value);
+     return {status:'written',blob_sha:sha,commit_sha:'b'.repeat(40)};
+   }};
+}
+function realCASArgs({providerStatus=200}={}){
+ const mocked=harness({providerStatus});
+ const store=casStore(makeCheckpoint(cFixture,cIdentity,1000));
+ return {mocked,store,args:{...mocked.args,f:cFixture,identity:cIdentity,store,
+   now:1001,postTurnNow:async()=>1002,
+   reserveTurn,commitTurn,holdProviderTurn,
+   budgetAdmitted:async()=>true,routeAdmitted:async()=>true}};
+}
+test('cross-source J11 read action is persisted by actual durable CAS and independent readback',async()=>{
+ const x=realCASArgs();
+ const r=await runOneTurn(x.args);
+ assert.equal(r.status,'checkpoint_committed');
+ assert.equal(r.provider_calls,1);
+ assert.equal(r.accepted_tasks,0);
+ const obs=await observeSession({f:cFixture,identity:cIdentity,store:x.store,now:1003});
+ assert.equal(obs.reserved_attempts,1);
+ assert.equal(obs.accepted,0);
+ assert.equal(obs.dispatch_authority,false);
+ const state=(await x.store.read()).document.state;
+ assert.equal(state.tasks[0].observations[0].record.id,'A-new');
+ assert.equal(state.events.at(-1).type,'READ');
+ assert.equal(x.mocked.counters().providerCalls,1);
+});
+test('cross-source J11 429 persists terminal provider hold through actual durable CAS, no replay',async()=>{
+ const x=realCASArgs({providerStatus:429});
+ const r=await runOneTurn(x.args);
+ assert.equal(r.status,'provider_held');
+ assert.equal(r.stop_this_pass,true);
+ assert.equal(r.accepted_tasks,null);
+ const obs=await observeSession({f:cFixture,identity:cIdentity,store:x.store,now:1003});
+ assert.equal(obs.reserved_attempts,1);
+ assert.equal(obs.accepted,0);
+ const state=(await x.store.read()).document.state;
+ assert.equal(state.stopped,true);
+ assert.equal(state.events.at(-1).type,'PROVIDER_HELD');
+ assert.equal(state.events.at(-1).reason,'rate_limited');
+ assert.equal(x.mocked.counters().providerCalls,1);
+ assert.equal(x.mocked.counters().bindingCalls,1);
 });
