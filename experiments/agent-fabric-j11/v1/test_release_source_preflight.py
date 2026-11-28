@@ -40,7 +40,7 @@ def admitted(text):
         "CC_NVIDIA_DIAGNOSTIC_ENABLED","J11_RELEASE_TARGET_CAS_PREFLIGHT=PASS",
         "J11_JUST_BEFORE_DEPLOY_VERSION_CHANGED__SAFE_HALT",
         "production_admitted", "False",
-        "provider_inference_calls" if False else "NVIDIA_PROVIDER_CALLS=0",
+        "NVIDIA_PROVIDER_CALLS=0",
     ]
     if not all(term in text for term in required):return False
     if "workflow_dispatch" in text:return False
@@ -68,7 +68,7 @@ class ExactJ11OwnerReleasePreflight(unittest.TestCase):
         self.assertNotIn("integrate.api.nvidia.com",self.text)
         self.assertIn("workers_dev",self.text)
         self.assertIn("preview_urls",self.text)
-        self.assertIn("NVIDIA_BOUND_REDEPLOY_READBACK=PASS",self.text)
+        self.assertIn("NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS",self.text)
         self.assertIn("J11_EXACT_V2_PREDECESSOR_READBACK=PASS",self.text)
 
     def test_changing_target_source_version_or_trigger_fails_contract(self):
