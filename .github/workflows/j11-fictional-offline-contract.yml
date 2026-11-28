@@ -37,7 +37,7 @@ jobs:
             "nvidia_j11_v2_bound_release_trigger.txt", "NVIDIA_PROVIDER_CALLS=0"]) assert.ok(t.includes(x), x);
           assert.ok(t.includes("branches: [main]"));
           assert.ok(!t.includes("workflow_dispatch"));
-          assert.ok(!t.includes("nvidia-visual-fixture"));
+          assert.ok(t.includes("! grep -q 'visual_fixture_runner"));
           const matches=[...t.matchAll(/ref: ([a-f0-9]{40})/g)].map(m=>m[1]);
           assert.deepEqual(matches,['e954bf5964a7d7d25888881d4894ce25400bf1ac']);
           console.log('J11_REVIEWED_SOURCE_RELEASE_STATIC_ADMISSION=PASS');
