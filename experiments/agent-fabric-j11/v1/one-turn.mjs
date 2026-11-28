@@ -27,7 +27,27 @@ export function candidateSelector(f,identity,reserved){
     'observed_route_mismatch');
   return {fixture_blob:FIXTURE_BLOB,task_id:source.id,observed_routes:observedRoutes};
 }
-export function admitProviderReply(reply,selector){
+const APPROVED_STATES=new Set(['active','stale_degraded','guest_independent_rescue_active','unhealthy','unknown']);
+function verifyCandidateAction(action,selector,fixture){
+  const task=fixture?.schema==='agent-fabric.j11.public-fictional.v1'
+    ?fixture.tasks?.find(t=>t.id===selector.task_id):null;
+  need(task&&Array.isArray(task.routes),'candidate_fixture_missing');
+  const fields=Object.keys(action).sort().join(',');
+  if(fields==='kind'&&action.kind==='yield')return;
+  if(fields==='kind,route'&&action.kind==='read'&&
+     typeof action.route==='string'&&
+     task.routes.some(r=>r.id===action.route)&&
+     !selector.observed_routes.includes(action.route))return;
+  if(fields==='evidence,kind,state'&&action.kind==='submit'&&
+     APPROVED_STATES.has(action.state)&&Array.isArray(action.evidence)&&
+     action.evidence.length>=1&&action.evidence.length<=3&&
+     new Set(action.evidence).size===action.evidence.length&&
+     action.evidence.every(id=>typeof id==='string'&&
+       task.routes.some(r=>selector.observed_routes.includes(r.id)&&r.record.id===id)))return;
+  throw Error('candidate_action_not_observed_or_not_allowed');
+}
+
+export function admitProviderReply(reply,selector,fixture){
   // The private inference Worker has already constrained model output to a
   // fixed action. This consumer still validates exact provenance and safe flags.
   need(reply&&typeof reply==='object'&&!Array.isArray(reply)&&
@@ -38,21 +58,21 @@ export function admitProviderReply(reply,selector){
     reply.private_input_used===false&&reply.model_action_executed===false&&
     reply.production_admitted===false&&reply.provider_attempt_upper_bound===1&&
     integer(reply.elapsed_ms,120000)&&
-    (reply.http_status===null||integer(reply.http_status,599))&&
+    (reply.http_status===null||(Number.isInteger(reply.http_status)&&reply.http_status>=100&&reply.http_status<=599))&&
     (reply.prompt_tokens===null||integer(reply.prompt_tokens,1000000))&&
     (reply.completion_tokens===null||integer(reply.completion_tokens,1000000)),
     'untrusted_provider_envelope');
+  need((['candidate_unexecuted','format_or_boundary_rejected'].includes(reply.status) && reply.http_status===200) ||
+    (reply.status==='rate_limited'&&reply.http_status===429) ||
+    (reply.status==='provider_unavailable'&&reply.http_status!==200&&reply.http_status!==429) ||
+    (reply.status==='transport_or_decode_failure'&&[null,200].includes(reply.http_status)),
+    'status_http_mismatch');
   if(reply.status!=='candidate_unexecuted')need(reply.action===null,'noncandidate_action_not_allowed');
   else {
     const action=reply.action;
     need(action&&typeof action==='object'&&!Array.isArray(action),
       'candidate_missing');
-    const fields=Object.keys(action).sort().join(',');
-    need((fields==='kind'&&action.kind==='yield') ||
-      (fields==='kind,route'&&action.kind==='read'&&typeof action.route==='string') ||
-      (fields==='evidence,kind,state'&&action.kind==='submit'&&
-       typeof action.state==='string'&&Array.isArray(action.evidence)),
-      'candidate_action_invalid');
+    verifyCandidateAction(action,selector,fixture);
   }
   return reply;
 }
@@ -83,7 +103,7 @@ export async function runOneTurn({f,identity,store,now,leaseSeconds=90,
   try{reply=await serviceTurn({selector,attempt:reserve.request.attempt});}
   catch{return {schema:'agent-fabric.j11.turn_outcome.v1',status:'provider_transport_indeterminate',
     dispatch:false,provider_calls:null,attempt:reserve.request.attempt,accepted_tasks:null,receipt:null};}
-  try{admitProviderReply(reply,selector);}
+  try{admitProviderReply(reply,selector,f);}
   catch{return {schema:'agent-fabric.j11.turn_outcome.v1',status:'provider_result_untrusted_reconcile',
     dispatch:false,provider_calls:null,attempt:reserve.request.attempt,accepted_tasks:null,receipt:null};}
   // Read a NEW trusted clock AFTER the external provider response. Synthetic
