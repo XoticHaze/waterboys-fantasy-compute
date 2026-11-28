@@ -33,6 +33,7 @@ jobs:
           node --check experiments/agent-fabric-j11/v1/one-turn.mjs
           test "$(git -C j11-worker-source rev-parse HEAD)" = "e954bf5964a7d7d25888881d4894ce25400bf1ac"
           node --test experiments/agent-fabric-j11/v1/*.test.mjs
+          python3 -m unittest discover -s experiments/agent-fabric-j11/v1 -p 'test_release_source_preflight.py' -v
       - name: Verify fixed J11 release workflow remains exact-manifest and zero-provider by default
         run: |
           set -euo pipefail
