@@ -63,6 +63,22 @@ jobs:
           }
           if any(fields.get(k)!=v for k,v in expected.items()):
               raise SystemExit("J11_EXACT_SOURCE_RELEASE_REQUEST_NOT_ADMITTED")
+          # Do not accept a trigger manifest's CI run ID on faith. Verify the
+          # actual independently published public-source workflow result.
+          ci_url="https://api.github.com/repos/XoticHaze/research-compute-public-/actions/runs/46143876262"
+          ci_request=Request(ci_url,headers={"Accept":"application/vnd.github+json",
+              "User-Agent":"cc-j11-exact-source-run-attestor",
+              "Authorization":"Bearer "+token})
+          with urlopen(ci_request,timeout=18) as ci_response:
+              ci_obs=json.load(ci_response)
+          if (ci_obs.get("id")!=46143876262 or
+              ci_obs.get("head_sha")!="e954bf5964a7d7d25888881d4894ce25400bf1ac" or
+              ci_obs.get("status")!="completed" or ci_obs.get("conclusion")!="success" or
+              ci_obs.get("event")!="push" or
+              ci_obs.get("path")!=".github/workflows/nvidia-j11-private-source-contract.yml" or
+              (ci_obs.get("repository") or {}).get("full_name")!="XoticHaze/research-compute-public-"):
+              raise SystemExit("J11_REVIEWED_PUBLIC_SOURCE_CI_NOT_ATTESTED")
+          print("J11_PUBLIC_SOURCE_CI_ATTESTATION=PASS")
           print("EXACT_REVIEWED_J11_SOURCE_RELEASE_MANIFEST=PASS")
           print("PRIVATE_INPUT_USED=false")
           PY

@@ -70,6 +70,8 @@ class ExactJ11OwnerReleasePreflight(unittest.TestCase):
         self.assertIn("preview_urls",self.text)
         self.assertIn("NVIDIA_BOUND_WORKER_REDEPLOY_READBACK=PASS",self.text)
         self.assertIn("J11_EXACT_V2_PREDECESSOR_READBACK=PASS",self.text)
+        self.assertIn("J11_PUBLIC_SOURCE_CI_ATTESTATION=PASS",self.text)
+        self.assertIn("J11_REVIEWED_PUBLIC_SOURCE_CI_NOT_ATTESTED",self.text)
 
     def test_changing_target_source_version_or_trigger_fails_contract(self):
         for old in [SOURCE,PREDECESSOR,CI,"ops/nvidia_j11_v2_bound_release_trigger.txt"]:
