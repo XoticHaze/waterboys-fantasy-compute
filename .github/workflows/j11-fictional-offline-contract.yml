@@ -6,6 +6,7 @@ on:
       - 'experiments/agent-fabric-j11/v1/**'
       - '.github/workflows/j11-fictional-offline-contract.yml'
       - '.github/workflows/nvidia-j11-v2-bound-source-release-r1.yml'
+      - 'experiments/agent-fabric-j11/v1/private-route-cross-source.test.mjs'
 permissions:
   contents: read
 jobs:
@@ -16,6 +17,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: e954bf5964a7d7d25888881d4894ce25400bf1ac
+          path: j11-worker-source
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -24,6 +31,7 @@ jobs:
           set -euo pipefail
           node --check experiments/agent-fabric-j11/v1/durable-session.mjs
           node --check experiments/agent-fabric-j11/v1/one-turn.mjs
+          test "$(git -C j11-worker-source rev-parse HEAD)" = "e954bf5964a7d7d25888881d4894ce25400bf1ac"
           node --test experiments/agent-fabric-j11/v1/*.test.mjs
       - name: Verify fixed J11 release workflow remains exact-manifest and zero-provider by default
         run: |
