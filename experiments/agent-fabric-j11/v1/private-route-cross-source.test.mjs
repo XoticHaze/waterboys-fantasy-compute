@@ -86,7 +86,7 @@ const cFixture={...fixture,tasks:[fixture.tasks[0]]};
 const cIdentity={mission_id:'cross-source-real-cas',fixture_blob:FIXTURE_BLOB,
   controller_blob:'2d86d46e91c1fb13f2d7e6db708f2866e8de64b2',deadline:1400,max_attempts:3};
 const clone=x=>JSON.parse(JSON.stringify(x));
-const gitSHA=x=>{const bytes=Buffer.from(JSON.stringify(x));return createHash('sha1').update('blob '+bytes.length+'\\0').update(bytes).digest('hex')};
+const gitSHA=x=>{const bytes=Buffer.from(JSON.stringify(x));return createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex')};
 function casStore(initial){
  let value=clone(initial),sha=gitSHA(value);
  return {read:async()=>({blob_sha:sha,document:clone(value)}),
