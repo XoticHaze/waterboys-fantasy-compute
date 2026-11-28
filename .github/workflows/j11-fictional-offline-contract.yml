@@ -5,6 +5,7 @@ on:
     paths:
       - 'experiments/agent-fabric-j11/v1/**'
       - '.github/workflows/j11-fictional-offline-contract.yml'
+      - '.github/workflows/nvidia-j11-v2-bound-source-release-r1.yml'
 permissions:
   contents: read
 jobs:
@@ -24,3 +25,20 @@ jobs:
           node --check experiments/agent-fabric-j11/v1/durable-session.mjs
           node --check experiments/agent-fabric-j11/v1/one-turn.mjs
           node --test experiments/agent-fabric-j11/v1/*.test.mjs
+      - name: Verify fixed J11 release workflow remains exact-manifest and zero-provider by default
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const t=fs.readFileSync('.github/workflows/nvidia-j11-v2-bound-source-release-r1.yml','utf8');
+          for (const x of ['e954bf5964a7d7d25888881d4894ce25400bf1ac','7ff97c4982b32cf08900dea000dd269a1f9d8ff1','b5ec0a32-9ac1-43d4-a87e-7e52a68d4c35','46143876262',
+            "preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED", "J11_RELEASE_TARGET_CAS_PREFLIGHT=PASS",
+            "nvidia_j11_v2_bound_release_trigger.txt", "NVIDIA_PROVIDER_CALLS=0"]) assert.ok(t.includes(x), x);
+          assert.ok(t.includes("branches: [main]"));
+          assert.ok(!t.includes("workflow_dispatch"));
+          assert.ok(!t.includes("nvidia-visual-fixture"));
+          const matches=[...t.matchAll(/ref: ([a-f0-9]{40})/g)].map(m=>m[1]);
+          assert.deepEqual(matches,['e954bf5964a7d7d25888881d4894ce25400bf1ac']);
+          console.log('J11_REVIEWED_SOURCE_RELEASE_STATIC_ADMISSION=PASS');
+          JS
