@@ -1,0 +1,110 @@
+name: J11 Public-Fictional Offline Contract
+on:
+  push:
+    branches: [agent-fabric/j11-durable-session-20261125]
+    paths:
+      - 'experiments/agent-fabric-j11/v1/**'
+      - '.github/workflows/j11-fictional-offline-contract.yml'
+      - '.github/workflows/nvidia-j11-v2-bound-source-release-r1.yml'
+      - 'experiments/agent-fabric-j11/v1/private-route-cross-source.test.mjs'
+permissions:
+  contents: read
+jobs:
+  controller-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: XoticHaze/research-compute-public-
+          ref: e954bf5964a7d7d25888881d4894ce25400bf1ac
+          path: j11-worker-source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Only fictional J11 controller and one-turn tests, zero provider calls
+        run: |
+          set -euo pipefail
+          node --check experiments/agent-fabric-j11/v1/durable-session.mjs
+          node --check experiments/agent-fabric-j11/v1/one-turn.mjs
+          test "$(git -C j11-worker-source rev-parse HEAD)" = "e954bf5964a7d7d25888881d4894ce25400bf1ac"
+          node --test experiments/agent-fabric-j11/v1/*.test.mjs
+          python3 -m unittest discover -s experiments/agent-fabric-j11/v1 -p 'test_release_source_preflight.py' -v
+      - name: Verify fixed J11 release workflow remains exact-manifest and zero-provider by default
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const t=fs.readFileSync('.github/workflows/nvidia-j11-v2-bound-source-release-r1.yml','utf8');
+          for (const x of ['e954bf5964a7d7d25888881d4894ce25400bf1ac','7ff97c4982b32cf08900dea000dd269a1f9d8ff1','b5ec0a32-9ac1-43d4-a87e-7e52a68d4c35','46143876262',
+            "preserve_CC_NVIDIA_DIAGNOSTIC_ENABLED", "J11_RELEASE_TARGET_CAS_PREFLIGHT=PASS",
+            "nvidia_j11_v2_bound_release_trigger.txt", "NVIDIA_PROVIDER_CALLS=0"]) assert.ok(t.includes(x), x);
+          assert.ok(t.includes("branches: [main]"));
+          assert.ok(!t.includes("workflow_dispatch"));
+          assert.ok(t.includes("! grep -q 'visual_fixture_runner"));
+          const matches=[...t.matchAll(/ref: ([a-f0-9]{40})/g)].map(m=>m[1]);
+          assert.deepEqual(matches,['e954bf5964a7d7d25888881d4894ce25400bf1ac']);
+          console.log('J11_REVIEWED_SOURCE_RELEASE_STATIC_ADMISSION=PASS');
+          JS
+      - name: Verify private J11 candidate bundles in Cloudflare Workers without account access
+        working-directory: j11-worker-source/cloudflare/shared-nvidia-inference
+        env:
+          CLOUDFLARE_API_TOKEN: ""
+          CLOUDFLARE_ACCOUNT_ID: ""
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const c=JSON.parse(fs.readFileSync('wrangler.jsonc','utf8'));
+          assert.equal(c.name,'cc-shared-nvidia-inference');
+          assert.equal(c.main,'src/index.js');
+          assert.equal(c.workers_dev,false);
+          assert.equal(c.preview_urls,false);
+          assert.equal(c.vars.CC_NVIDIA_DIAGNOSTIC_ENABLED,'0');
+          assert.equal(c.secrets_store_secrets,undefined);
+          assert.ok(!fs.readFileSync(c.main,'utf8').includes('nvidia-visual-fixture'));
+          console.log('J11_PRIVATE_WORKER_INERT_SOURCE_CONFIG=PASS');
+          JS
+          npx --yes wrangler@4.151.3 deploy --dry-run --config wrangler.jsonc --outdir "$RUNNER_TEMP/j11-worker-build"
+          test -d "$RUNNER_TEMP/j11-worker-build"
+          echo 'J11_WORKERS_BUNDLE_DRYRUN=PASS'
+      - name: Exercise actual local Workers runtime with provider gate default OFF
+        working-directory: j11-worker-source/cloudflare/shared-nvidia-inference
+        env:
+          CLOUDFLARE_API_TOKEN: ""
+          CLOUDFLARE_ACCOUNT_ID: ""
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.151.3 dev --config wrangler.jsonc --ip 127.0.0.1 --port 8797 > "$RUNNER_TEMP/j11-local-workerd.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 35); do
+            if curl --silent --max-time 2 -o /dev/null http://127.0.0.1:8797/; then ready=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then echo "J11_LOCAL_RUNTIME_UNAVAILABLE"; exit 1; fi
+          curl --silent --show-error --max-time 8 -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"fixture_blob":"a459d065e6188ea8b01ab1a5b2c721789587982d","task_id":"A","observed_routes":[]}' \
+            -w '%{http_code}' \
+            -o "$RUNNER_TEMP/j11-disabled-reply.json" \
+            http://127.0.0.1:8797/internal/diagnostics/nvidia-j11 > "$RUNNER_TEMP/j11-disabled-status"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          status=(root/'j11-disabled-status').read_text().strip()
+          payload=json.loads((root/'j11-disabled-reply.json').read_text())
+          if status!='503' or payload!={'error':'diagnostic_not_admitted'}:
+              raise SystemExit('J11_DEFAULT_DISABLED_GATE_NOT_VERIFIED')
+          print('J11_LOCAL_WORKER_DEFAULT_GATE_DENIAL=PASS')
+          print('J11_ACTUAL_PROVIDER_REQUESTS=0')
+          PY

@@ -1,0 +1,217 @@
+{
+  "schema": "agent-fabric.j11.public-fictional.v1",
+  "as_of": 1000,
+  "freshness_seconds": 60,
+  "tasks": [
+    {
+      "id": "A",
+      "goal": "Determine current host heartbeat from conflicting registry and mailbox records.",
+      "routes": [
+        {
+          "id": "registry",
+          "record": {
+            "id": "A-old",
+            "ts": 700,
+            "kind": "registry",
+            "state": "not_installed"
+          }
+        },
+        {
+          "id": "mailbox",
+          "record": {
+            "id": "A-new",
+            "ts": 989,
+            "kind": "heartbeat",
+            "state": "polling",
+            "target": "A"
+          }
+        }
+      ],
+      "gold": {
+        "state": "active",
+        "evidence": [
+          "A-new"
+        ]
+      }
+    },
+    {
+      "id": "B",
+      "goal": "Determine direct edge service health.",
+      "routes": [
+        {
+          "id": "direct",
+          "record": {
+            "id": "B-now",
+            "ts": 994,
+            "kind": "heartbeat",
+            "state": "idle",
+            "service": "running",
+            "target": "B"
+          }
+        }
+      ],
+      "gold": {
+        "state": "active",
+        "evidence": [
+          "B-now"
+        ]
+      }
+    },
+    {
+      "id": "C",
+      "goal": "Assess whether a separate rescue executor covers this guest.",
+      "routes": [
+        {
+          "id": "rescue",
+          "record": {
+            "id": "C-host",
+            "ts": 991,
+            "kind": "heartbeat",
+            "state": "polling",
+            "target": "C",
+            "independent_of_guest": true,
+            "independent_of_host": false
+          }
+        }
+      ],
+      "gold": {
+        "state": "guest_independent_rescue_active",
+        "evidence": [
+          "C-host"
+        ]
+      }
+    },
+    {
+      "id": "D",
+      "goal": "Determine current worker readiness and heartbeat freshness.",
+      "routes": [
+        {
+          "id": "worker",
+          "record": {
+            "id": "D-old",
+            "ts": 850,
+            "kind": "heartbeat",
+            "state": "degraded",
+            "transport_up": true,
+            "guest_ready": false,
+            "target": "D"
+          }
+        }
+      ],
+      "gold": {
+        "state": "stale_degraded",
+        "evidence": [
+          "D-old"
+        ]
+      }
+    },
+    {
+      "id": "E",
+      "goal": "Assess application health independently of transport.",
+      "routes": [
+        {
+          "id": "edge",
+          "record": {
+            "id": "E-denied",
+            "ts": 993,
+            "kind": "transport",
+            "state": "passed",
+            "nested": "permission_denied",
+            "target": "E"
+          }
+        },
+        {
+          "id": "application",
+          "record": {
+            "id": "E-app",
+            "ts": 995,
+            "kind": "application_health",
+            "state": "unhealthy",
+            "target": "E"
+          }
+        }
+      ],
+      "gold": {
+        "state": "unhealthy",
+        "evidence": [
+          "E-app",
+          "E-denied"
+        ]
+      }
+    },
+    {
+      "id": "F",
+      "goal": "Reconcile legacy and successor ordinary agent channels.",
+      "routes": [
+        {
+          "id": "legacy",
+          "record": {
+            "id": "F-old",
+            "ts": 600,
+            "kind": "heartbeat",
+            "state": "polling",
+            "target": "F"
+          }
+        },
+        {
+          "id": "successor",
+          "record": {
+            "id": "F-new",
+            "ts": 990,
+            "kind": "heartbeat",
+            "state": "polling",
+            "target": "F"
+          }
+        },
+        {
+          "id": "neighbor",
+          "record": {
+            "id": "X-new",
+            "ts": 999,
+            "kind": "heartbeat",
+            "state": "polling",
+            "target": "X"
+          }
+        }
+      ],
+      "gold": {
+        "state": "active",
+        "evidence": [
+          "F-new"
+        ]
+      }
+    },
+    {
+      "id": "G",
+      "goal": "Determine protected worker heartbeat separately from command result.",
+      "routes": [
+        {
+          "id": "result",
+          "record": {
+            "id": "G-result",
+            "ts": 997,
+            "kind": "command_receipt",
+            "state": "passed",
+            "target": "G"
+          }
+        },
+        {
+          "id": "protected",
+          "record": {
+            "id": "G-now",
+            "ts": 992,
+            "kind": "heartbeat",
+            "state": "polling",
+            "target": "G"
+          }
+        }
+      ],
+      "gold": {
+        "state": "active",
+        "evidence": [
+          "G-now"
+        ]
+      }
+    }
+  ]
+}
