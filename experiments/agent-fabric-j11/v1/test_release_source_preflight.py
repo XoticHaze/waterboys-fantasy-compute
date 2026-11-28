@@ -64,6 +64,14 @@ class ExactJ11OwnerReleasePreflight(unittest.TestCase):
         for i,src in enumerate(chunks):
             with self.subTest(script=i): ast.parse(src)
 
+    def test_public_source_ci_read_does_not_reuse_other_repository_token(self):
+        first=scripts(self.text)[0]
+        self.assertIn("ci_request=Request(ci_url",first)
+        self.assertIn("cc-j11-exact-public-source-run-attestor",first)
+        ci_region=first.split("ci_request=Request(ci_url",1)[1].split("with urlopen(ci_request",1)[0]
+        self.assertNotIn("Authorization",ci_region)
+        self.assertNotIn("Bearer",ci_region)
+
     def test_no_implicit_provider_call_or_new_worker_config(self):
         self.assertNotIn("integrate.api.nvidia.com",self.text)
         self.assertIn("workers_dev",self.text)
