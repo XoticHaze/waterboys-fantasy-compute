@@ -66,9 +66,12 @@ jobs:
           # Do not accept a trigger manifest's CI run ID on faith. Verify the
           # actual independently published public-source workflow result.
           ci_url="https://api.github.com/repos/XoticHaze/research-compute-public-/actions/runs/46143876262"
+          # This workflow's contents:read GITHUB_TOKEN belongs to WaterBoys,
+          # not the separate public NVIDIA source repo's Actions permission.
+          # GitHub explicitly allows GET of public run metadata anonymously.
+          # Keep the scoped token only for this repository's trigger read.
           ci_request=Request(ci_url,headers={"Accept":"application/vnd.github+json",
-              "User-Agent":"cc-j11-exact-source-run-attestor",
-              "Authorization":"Bearer "+token})
+              "User-Agent":"cc-j11-exact-public-source-run-attestor"})
           with urlopen(ci_request,timeout=18) as ci_response:
               ci_obs=json.load(ci_response)
           if (ci_obs.get("id")!=46143876262 or
